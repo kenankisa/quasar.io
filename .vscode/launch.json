@@ -1,0 +1,41 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Chrome",
+            "request": "launch",
+            "type": "chrome",
+            "url": "http://localhost:8080",
+            "webRoot": "${workspaceFolder}"
+        },
+        {
+            "name": "quasar_io (Chrome)",
+            "cwd": "${workspaceFolder}",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "chrome",
+            "toolArgs": [
+                "--dart-define-from-file=dart_defines.dev.json"
+            ]
+        },
+        {
+            "name": "quasar_io (Windows)",
+            "cwd": "${workspaceFolder}",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "windows",
+            "toolArgs": [
+                "--dart-define-from-file=dart_defines.dev.json"
+            ]
+        },
+        {
+            "name": "quasar_io",
+            "cwd": "${workspaceFolder}",
+            "request": "launch",
+            "type": "dart",
+            "toolArgs": [
+                "--dart-define-from-file=dart_defines.dev.json"
+            ]
+        }
+    ]
+}
