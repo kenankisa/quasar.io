@@ -16,6 +16,7 @@ class RewardDoubleAdButton extends StatefulWidget {
     required this.prepareSession,
     required this.attestSession,
     required this.claimDouble,
+    this.ssvUserId,
     this.primaryColor = const Color(0xFFFFD700),
     this.foregroundColor = Colors.black,
   });
@@ -23,8 +24,11 @@ class RewardDoubleAdButton extends StatefulWidget {
   final int baseDiamonds;
   final Future<bool> Function() ensureBaseClaimed;
   final Future<String?> Function() prepareSession;
+  /// Waits for AdMob SSV (or allowed client attest) after the ad.
   final Future<bool> Function(String sessionId) attestSession;
   final Future<PlayerProfile?> Function(String sessionId) claimDouble;
+  /// Supabase user id for AdMob SSV `user_id`.
+  final String? ssvUserId;
   final Color primaryColor;
   final Color foregroundColor;
 
@@ -88,7 +92,10 @@ class _RewardDoubleAdButtonState extends State<RewardDoubleAdButton> {
         PlayerSessionService.instance.setMatchIdlePaused(true);
         bool earned = false;
         try {
-          earned = await AdService.instance.showRewardedDoubleAd();
+          earned = await AdService.instance.showRewardedDoubleAd(
+            ssvUserId: widget.ssvUserId,
+            ssvCustomData: sessionId,
+          );
         } finally {
           PlayerSessionService.instance.setMatchIdlePaused(false);
         }
@@ -97,6 +104,10 @@ class _RewardDoubleAdButtonState extends State<RewardDoubleAdButton> {
             setState(() => _statusKey = 'reward_double_ad_failed');
           }
           return;
+        }
+
+        if (mounted) {
+          setState(() => _statusKey = 'reward_double_claiming');
         }
 
         final attested = await widget.attestSession(sessionId);
@@ -148,7 +159,8 @@ class _RewardDoubleAdButtonState extends State<RewardDoubleAdButton> {
           ? 'reward_double_grant_failed'
           : 'reward_double_ad_failed';
       if (msg.contains('ad_watch_too_short') ||
-          msg.contains('ad_not_attested')) {
+          msg.contains('ad_not_attested') ||
+          msg.contains('ssv_required')) {
         key = 'reward_double_claim_wait';
       } else if (msg.contains('ad_double_daily_limit') ||
           msg.contains('ad_session') ||

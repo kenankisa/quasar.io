@@ -10,6 +10,7 @@ import '../game/models/room_instance.dart';
 import '../game/orbit_game.dart';
 import '../game/models/room_leaderboard.dart';
 import '../services/analytics_play_tracker.dart';
+import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/lang_service.dart';
 import '../services/player_session_service.dart';
@@ -270,7 +271,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         sessionId.isEmpty) {
       return Future<bool>.value(false);
     }
-    return ProfileService.instance.attestRewardedMatchDouble(
+    return ProfileService.instance.waitForRewardedMatchDoubleAttest(
       roomType: widget.roomType,
       roomInstanceId: roomId,
       sessionId: sessionId,
@@ -561,6 +562,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               claimDouble: _canOfferRewardDouble
                                   ? _claimRewardedMatchDouble
                                   : null,
+                              ssvUserId: AuthService.instance.currentUser?.id,
                             );
                           }
                           if (spectating) {
@@ -623,6 +625,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         claimDouble: _canOfferRewardDouble && reward > 0
                             ? _claimRewardedMatchDouble
                             : null,
+                        ssvUserId: AuthService.instance.currentUser?.id,
                       );
                     },
                   ),

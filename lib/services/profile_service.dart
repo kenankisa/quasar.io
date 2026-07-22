@@ -568,7 +568,10 @@ class ProfileService {
     return response.toString();
   }
 
-  /// Marks the ad session as watched (after [AdService] onUserEarnedReward).
+  /// Marks the ad session as watched.
+  /// Prod: raises `ssv_required` unless SSV already attested — then poll
+  /// [isRewardedMatchDoubleAttested]. Dev: enable
+  /// `app.ad_double_allow_client_attest` in SQL.
   Future<bool> attestRewardedMatchDouble({
     required RoomType roomType,
     required String roomInstanceId,
@@ -579,15 +582,79 @@ class ProfileService {
     if (roomType == RoomType.simple) return false;
     if (sessionId.isEmpty) return false;
 
-    await _client.rpc(
-      'attest_rewarded_match_double',
+    try {
+      await _client.rpc(
+        'attest_rewarded_match_double',
+        params: {
+          'p_room_type': roomType.name,
+          'p_room_instance_id': roomInstanceId,
+          'p_session_id': sessionId,
+        },
+      );
+      return true;
+    } on PostgrestException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('ssv_required')) {
+        return false;
+      }
+      rethrow;
+    }
+  }
+
+  /// True when AdMob SSV (or allowed client attest) has marked the session.
+  Future<bool> isRewardedMatchDoubleAttested({
+    required RoomType roomType,
+    required String roomInstanceId,
+    required String sessionId,
+  }) async {
+    final userId = _userId;
+    if (userId == null) return false;
+    if (roomType == RoomType.simple) return false;
+    if (sessionId.isEmpty) return false;
+
+    final response = await _client.rpc(
+      'is_rewarded_match_double_attested',
       params: {
         'p_room_type': roomType.name,
         'p_room_instance_id': roomInstanceId,
         'p_session_id': sessionId,
       },
     );
-    return true;
+    return response == true;
+  }
+
+  /// Wait for SSV (or client attest) before claiming.
+  Future<bool> waitForRewardedMatchDoubleAttest({
+    required RoomType roomType,
+    required String roomInstanceId,
+    required String sessionId,
+    Duration timeout = const Duration(seconds: 45),
+    Duration interval = const Duration(seconds: 2),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+
+    while (DateTime.now().isBefore(deadline)) {
+      // Prefer client attest when server GUC allows (local/dev).
+      try {
+        final ok = await attestRewardedMatchDouble(
+          roomType: roomType,
+          roomInstanceId: roomInstanceId,
+          sessionId: sessionId,
+        );
+        if (ok) return true;
+      } catch (_) {
+        // ad_watch_too_short / other — keep polling / retrying.
+      }
+
+      final ready = await isRewardedMatchDoubleAttested(
+        roomType: roomType,
+        roomInstanceId: roomInstanceId,
+        sessionId: sessionId,
+      );
+      if (ready) return true;
+      await Future<void>.delayed(interval);
+    }
+    return false;
   }
 
   /// Rewarded ad: grant a second copy of this match's diamond reward.

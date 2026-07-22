@@ -21,6 +21,7 @@ class VictoryOverlay extends StatefulWidget {
     this.prepareSession,
     this.attestSession,
     this.claimDouble,
+    this.ssvUserId,
   });
 
   final RoomType roomType;
@@ -31,6 +32,7 @@ class VictoryOverlay extends StatefulWidget {
   final Future<String?> Function()? prepareSession;
   final Future<bool> Function(String sessionId)? attestSession;
   final Future<PlayerProfile?> Function(String sessionId)? claimDouble;
+  final String? ssvUserId;
 
   @override
   State<VictoryOverlay> createState() => _VictoryOverlayState();
@@ -174,6 +176,7 @@ class _VictoryOverlayState extends State<VictoryOverlay>
                       prepareSession: widget.prepareSession!,
                       attestSession: widget.attestSession!,
                       claimDouble: widget.claimDouble!,
+                      ssvUserId: widget.ssvUserId,
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -282,6 +285,7 @@ class FrozenChampionOverlay extends StatefulWidget {
     this.prepareSession,
     this.attestSession,
     this.claimDouble,
+    this.ssvUserId,
     this.showDoubleReward = false,
   });
 
@@ -296,6 +300,7 @@ class FrozenChampionOverlay extends StatefulWidget {
   final Future<String?> Function()? prepareSession;
   final Future<bool> Function(String sessionId)? attestSession;
   final Future<PlayerProfile?> Function(String sessionId)? claimDouble;
+  final String? ssvUserId;
   final bool showDoubleReward;
 
   @override
@@ -384,6 +389,7 @@ class _FrozenChampionOverlayState extends State<FrozenChampionOverlay> {
                   prepareSession: widget.prepareSession!,
                   attestSession: widget.attestSession!,
                   claimDouble: widget.claimDouble!,
+                  ssvUserId: widget.ssvUserId,
                   primaryColor: const Color(0xFF00F0FF),
                   foregroundColor: Colors.black,
                 ),

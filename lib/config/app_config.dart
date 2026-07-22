@@ -74,12 +74,14 @@ class AppConfig {
       iosRewardedDoubleAdUnitId.contains('3940256099942544');
 
   /// Web OAuth redirect origin allowlist (exact match).
-  /// Empty → fall back to [Uri.base.origin] only for localhost / 127.0.0.1.
+  /// Required for non-localhost web builds (fail-closed when empty).
+  /// Empty → only localhost / 127.0.0.1 may use [Uri.base.origin].
   static const String oauthRedirectOrigin = String.fromEnvironment(
     'OAUTH_REDIRECT_ORIGIN',
   );
 
   /// Safe web OAuth redirect. Prefer exact [oauthRedirectOrigin] allowlist.
+  /// Non-localhost builds fail closed when [oauthRedirectOrigin] is unset.
   static String? webOAuthRedirectTo(Uri pageUri) {
     final origin = pageUri.origin;
     final allowed = oauthRedirectOrigin.trim();
@@ -91,7 +93,6 @@ class AppConfig {
     if (host == 'localhost' || host == '127.0.0.1') {
       return origin;
     }
-    // Production web builds should set OAUTH_REDIRECT_ORIGIN.
-    return origin;
+    return null;
   }
 }

@@ -86,7 +86,13 @@ class AdService {
   }
 
   /// Shows a rewarded ad. Returns true when the reward is granted.
-  Future<bool> showRewardedAd({required String adUnitId}) async {
+  ///
+  /// [ssvUserId] / [ssvCustomData] are sent to AdMob SSV (server callback).
+  Future<bool> showRewardedAd({
+    required String adUnitId,
+    String? ssvUserId,
+    String? ssvCustomData,
+  }) async {
     if (_loading || !adsSupported || adUnitId.isEmpty) return false;
 
     if (!_initialized) {
@@ -112,6 +118,16 @@ class AdService {
     final completer = Completer<bool>();
 
     try {
+      if ((ssvUserId != null && ssvUserId.isNotEmpty) ||
+          (ssvCustomData != null && ssvCustomData.isNotEmpty)) {
+        await ad.setServerSideOptions(
+          ServerSideVerificationOptions(
+            userId: ssvUserId,
+            customData: ssvCustomData,
+          ),
+        );
+      }
+
       ad.fullScreenContentCallback = FullScreenContentCallback(
         onAdDismissedFullScreenContent: (ad) {
           ad.dispose();
@@ -143,8 +159,15 @@ class AdService {
     }
   }
 
-  Future<bool> showRewardedDoubleAd() =>
-      showRewardedAd(adUnitId: _doubleAdUnitId);
+  Future<bool> showRewardedDoubleAd({
+    String? ssvUserId,
+    String? ssvCustomData,
+  }) =>
+      showRewardedAd(
+        adUnitId: _doubleAdUnitId,
+        ssvUserId: ssvUserId,
+        ssvCustomData: ssvCustomData,
+      );
 
   /// Reserved for a later revive flow.
   Future<bool> showRewardedReviveAd() =>
