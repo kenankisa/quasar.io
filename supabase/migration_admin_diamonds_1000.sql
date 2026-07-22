@@ -15,10 +15,16 @@ begin
     peak_diamonds = greatest(coalesce(p.peak_diamonds, 0), 1000),
     updated_at = timezone('utc', now())
   where p.id in (select a.user_id from public.admin_users a)
-     or p.id in (
-       select u.id
-       from auth.users u
-       where lower(coalesce(u.email, '')) = 'kenankisa@gmail.com'
+     or (
+       nullif(trim(coalesce(current_setting('app.admin_seed_email', true), '')), '')
+         is not null
+       and p.id in (
+         select u.id
+         from auth.users u
+         where lower(coalesce(u.email, '')) = lower(trim(
+           current_setting('app.admin_seed_email', true)
+         ))
+       )
      );
 
   get diagnostics v_updated = row_count;

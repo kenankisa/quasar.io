@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/safe_debug.dart';
 import 'auth_service.dart';
 
 /// Sunucu tarafı admin claim (`app_metadata.role` / `admin_users`).
@@ -59,7 +60,7 @@ class AdminAccess extends ChangeNotifier {
       } catch (e) {
         // GoTrue başarısız refresh'te oturumu silebilir; RPC hâlâ eski
         // access token ile çalışabilir. Burada admin durumunu düşürme.
-        debugPrint('AdminAccess.refreshSession skipped: $e');
+        safeDebugPrint('AdminAccess.refreshSession skipped: $e');
         if (AuthService.instance.currentUser == null) {
           _serverConfirmed = false;
           notifyListeners();
@@ -80,14 +81,14 @@ class AdminAccess extends ChangeNotifier {
         try {
           await AuthService.instance.client.auth.refreshSession();
         } catch (e) {
-          debugPrint('AdminAccess.claim refresh skipped: $e');
+          safeDebugPrint('AdminAccess.claim refresh skipped: $e');
         }
       }
 
       notifyListeners();
       return isAdmin;
     } catch (e, stackTrace) {
-      debugPrint('AdminAccess.refreshAdminStatus: $e\n$stackTrace');
+      safeDebugPrint('AdminAccess.refreshAdminStatus: $e\n$stackTrace');
       // RPC başarısızsa admin UI açma — sunucu onayı şart.
       _serverConfirmed = false;
       notifyListeners();

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../game/config/room_config.dart';
 import '../game/room_type.dart';
+import '../utils/safe_debug.dart';
 import 'admin_access.dart';
 import 'auth_service.dart';
 import 'load_test_sim_player.dart';
@@ -236,7 +237,7 @@ class AdminLoadTestService extends ChangeNotifier {
           await _restoreAdminSession(adminSession);
           mintedList.add(await _mintCredentials(i));
         } catch (e, st) {
-          debugPrint('Mint #$i failed: $e\n$st');
+          safeDebugPrint('Mint #$i failed: $e\n$st');
           _error = _humanizeStartError(e);
           if (mintedList.isEmpty) {
             _activeRoomTypes.clear();
@@ -266,7 +267,7 @@ class AdminLoadTestService extends ChangeNotifier {
           started++;
           notifyListeners();
         } catch (e, st) {
-          debugPrint('Sim player #$index failed: $e\n$st');
+          safeDebugPrint('Sim player #$index failed: $e\n$st');
           _failed++;
           player.error = e.toString();
           await player.stop();
@@ -353,7 +354,7 @@ class AdminLoadTestService extends ChangeNotifier {
         '(was ${current?.user.id}, expect ${snapshot.user.id})',
       );
     } catch (e) {
-      debugPrint('AdminLoadTest: restore admin session failed: $e');
+      safeDebugPrint('AdminLoadTest: restore admin session failed: $e');
     }
   }
 
@@ -379,14 +380,29 @@ class AdminLoadTestService extends ChangeNotifier {
         throw StateError(parts.join(' '));
       }
       final email = map['email'] as String?;
-      final password = map['password'] as String?;
-      if (email == null || password == null) {
+      final userId = map['user_id'] as String?;
+      if (email == null || userId == null) {
         throw StateError('mint failed: missing credentials');
       }
+
+      // Legacy mint may still return password; prefer one-time claim.
+      var password = map['password'] as String?;
+      if (password == null || password.isEmpty) {
+        final secretResponse = await _adminClient.rpc(
+          'admin_claim_sim_mint_secret',
+          params: {'p_user_id': userId},
+        );
+        final secretMap = Map<String, dynamic>.from(secretResponse as Map);
+        password = secretMap['password'] as String?;
+      }
+      if (password == null || password.isEmpty) {
+        throw StateError('mint failed: missing one-time secret');
+      }
+
       return LoadTestSimCredentials(
         email: email,
         password: password,
-        userId: map['user_id'] as String?,
+        userId: userId,
         username: map['username'] as String?,
       );
     } on PostgrestException catch (e) {
@@ -470,8 +486,16 @@ class AdminLoadTestService extends ChangeNotifier {
         lower.contains('insufficient_diamonds')) {
       return 'admin_load_test_sim_migration_hint';
     }
-    // Ham sunucu mesajını göster (yanlış "admin yetkisi" etiketleme)
-    return 'admin_load_test_start_failed|$msg';
+    return 'admin_load_test_start_failed|${_redactForUi(msg)}';
+  }
+
+  static String _redactForUi(String msg) {
+    return msg
+        .replaceAll(RegExp(r'SimLt_[A-Za-z0-9_]+'), 'SimLt_***')
+        .replaceAll(
+          RegExp(r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'),
+          'eyJ***.***.***',
+        );
   }
 
   Future<int?> stop({bool silent = false}) async {

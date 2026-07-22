@@ -117,8 +117,9 @@ begin
 end;
 $$;
 
-revoke all on function public._rank_win_points_for_room(text) from public;
-grant execute on function public._rank_win_points_for_room(text) to authenticated;
+revoke all on function public._rank_win_points_for_room(text)
+  from public, anon, authenticated;
+-- İstemci EXECUTE yok; yalnızca sunucu içi (apply_match_result vb.) çağırır.
 
 -- -----------------------------------------------------------------------------
 -- 4) Ekonomi koruması — rank_points istemci yazamaz

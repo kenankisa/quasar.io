@@ -263,6 +263,20 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<bool> _attestRewardedMatchDouble(String sessionId) {
+    final roomId = widget.roomInstance?.id;
+    if (roomId == null ||
+        widget.roomType == RoomType.simple ||
+        sessionId.isEmpty) {
+      return Future<bool>.value(false);
+    }
+    return ProfileService.instance.attestRewardedMatchDouble(
+      roomType: widget.roomType,
+      roomInstanceId: roomId,
+      sessionId: sessionId,
+    );
+  }
+
   Future<String?> _prepareRewardedMatchDouble() {
     final roomId = widget.roomInstance?.id;
     if (roomId == null || widget.roomType == RoomType.simple) {
@@ -541,6 +555,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               prepareSession: _canOfferRewardDouble
                                   ? _prepareRewardedMatchDouble
                                   : null,
+                              attestSession: _canOfferRewardDouble
+                                  ? _attestRewardedMatchDouble
+                                  : null,
                               claimDouble: _canOfferRewardDouble
                                   ? _claimRewardedMatchDouble
                                   : null,
@@ -599,6 +616,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             : null,
                         prepareSession: _canOfferRewardDouble && reward > 0
                             ? _prepareRewardedMatchDouble
+                            : null,
+                        attestSession: _canOfferRewardDouble && reward > 0
+                            ? _attestRewardedMatchDouble
                             : null,
                         claimDouble: _canOfferRewardDouble && reward > 0
                             ? _claimRewardedMatchDouble

@@ -24,11 +24,14 @@ migrate_working_dir/
 #.vscode/
 
 # Local secrets / dart-define (keep only *.example in git)
+# NEVER force-add these — anon keys + OAuth client ids live here.
 dart_defines.dev.json
 dart_defines.prod.json
 dart_defines*.local.json
 dart_defines*.json
 !dart_defines*.json.example
+!dart_defines.dev.json.example
+!dart_defines.prod.json.example
 
 # Android signing / local secrets
 **/android/key.properties

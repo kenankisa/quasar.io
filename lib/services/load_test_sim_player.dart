@@ -13,19 +13,27 @@ import '../game/models/room_instance.dart';
 import '../game/room_type.dart';
 import '../models/cosmetic_item.dart';
 import '../utils/bot_name.dart';
+import '../utils/safe_debug.dart';
 
 class LoadTestSimCredentials {
-  const LoadTestSimCredentials({
+  LoadTestSimCredentials({
     required this.email,
-    required this.password,
+    required String password,
     this.userId,
     this.username,
-  });
+  }) : _password = password;
 
   final String email;
-  final String password;
+  String _password;
   final String? userId;
   final String? username;
+
+  String get password => _password;
+
+  /// Clear plaintext after successful sign-in (low: reduce memory / log leak).
+  void clearPassword() {
+    _password = '';
+  }
 }
 
 enum _SimPersonality { aggressive, farmer, cautious }
@@ -193,37 +201,23 @@ class LoadTestSimPlayer {
   Future<void> _authenticate(LoadTestSimCredentials? minted) async {
     final client = _client!;
 
-    if (minted != null) {
-      userId = await _signInWithRetry(
-        () => client.auth.signInWithPassword(
-          email: minted.email,
-          password: minted.password,
-        ),
-        fallbackUserId: minted.userId,
+    if (minted == null) {
+      throw StateError(
+        'Sim#$index: minted credentials required. '
+        'Run migration_load_test_sim_mint.sql (admin_mint_sim_player). '
+        'Anonymous Auth is disabled for sim mint.',
       );
-      debugPrint('Sim#$index auth: minted signIn $userId');
-      return;
     }
 
-    try {
-      userId = await _signInWithRetry(
-        () => client.auth.signInAnonymously(
-          data: {
-            'is_sim': true,
-            'full_name': displayName,
-          },
-        ),
-      );
-      debugPrint('Sim#$index auth: anonymous $userId');
-      return;
-    } catch (e) {
-      debugPrint('Sim#$index anonymous auth failed: $e');
-    }
-
-    throw StateError(
-      'Sim#$index: auth failed. Run migration_load_test_sim_mint.sql '
-      '(admin_mint_sim_player) or enable Anonymous sign-ins.',
+    userId = await _signInWithRetry(
+      () => client.auth.signInWithPassword(
+        email: minted.email,
+        password: minted.password,
+      ),
+      fallbackUserId: minted.userId,
     );
+    minted.clearPassword();
+    safeDebugPrint('Sim#$index auth: minted signIn $userId');
   }
 
   Future<String> _signInWithRetry(

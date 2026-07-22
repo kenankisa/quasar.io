@@ -19,6 +19,7 @@ class VictoryOverlay extends StatefulWidget {
     this.victoryElapsed = 0,
     this.ensureBaseClaimed,
     this.prepareSession,
+    this.attestSession,
     this.claimDouble,
   });
 
@@ -28,6 +29,7 @@ class VictoryOverlay extends StatefulWidget {
   final double victoryElapsed;
   final Future<bool> Function()? ensureBaseClaimed;
   final Future<String?> Function()? prepareSession;
+  final Future<bool> Function(String sessionId)? attestSession;
   final Future<PlayerProfile?> Function(String sessionId)? claimDouble;
 
   @override
@@ -164,11 +166,13 @@ class _VictoryOverlayState extends State<VictoryOverlay>
                       widget.roomType != RoomType.simple &&
                       widget.ensureBaseClaimed != null &&
                       widget.prepareSession != null &&
+                      widget.attestSession != null &&
                       widget.claimDouble != null) ...[
                     RewardDoubleAdButton(
                       baseDiamonds: reward,
                       ensureBaseClaimed: widget.ensureBaseClaimed!,
                       prepareSession: widget.prepareSession!,
+                      attestSession: widget.attestSession!,
                       claimDouble: widget.claimDouble!,
                     ),
                     const SizedBox(height: 12),
@@ -276,6 +280,7 @@ class FrozenChampionOverlay extends StatefulWidget {
     this.diamondReward = 0,
     this.ensureBaseClaimed,
     this.prepareSession,
+    this.attestSession,
     this.claimDouble,
     this.showDoubleReward = false,
   });
@@ -289,6 +294,7 @@ class FrozenChampionOverlay extends StatefulWidget {
   final int diamondReward;
   final Future<bool> Function()? ensureBaseClaimed;
   final Future<String?> Function()? prepareSession;
+  final Future<bool> Function(String sessionId)? attestSession;
   final Future<PlayerProfile?> Function(String sessionId)? claimDouble;
   final bool showDoubleReward;
 
@@ -370,11 +376,13 @@ class _FrozenChampionOverlayState extends State<FrozenChampionOverlay> {
                   widget.diamondReward > 0 &&
                   widget.ensureBaseClaimed != null &&
                   widget.prepareSession != null &&
+                  widget.attestSession != null &&
                   widget.claimDouble != null) ...[
                 RewardDoubleAdButton(
                   baseDiamonds: widget.diamondReward,
                   ensureBaseClaimed: widget.ensureBaseClaimed!,
                   prepareSession: widget.prepareSession!,
+                  attestSession: widget.attestSession!,
                   claimDouble: widget.claimDouble!,
                   primaryColor: const Color(0xFF00F0FF),
                   foregroundColor: Colors.black,

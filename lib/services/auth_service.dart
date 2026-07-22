@@ -1,8 +1,9 @@
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_config.dart';
+import '../utils/safe_debug.dart';
 import 'admin_access.dart';
 
 class AuthService {
@@ -28,7 +29,7 @@ class AuthService {
           serverClientId: AppConfig.googleWebClientId,
         );
       } catch (e, stackTrace) {
-        debugPrint('GoogleSignIn init failed: $e\n$stackTrace');
+        safeDebugPrint('GoogleSignIn init failed: $e\n$stackTrace');
         return;
       }
     }
@@ -38,9 +39,15 @@ class AuthService {
 
   Future<void> signInWithGoogle() async {
     if (kIsWeb) {
+      final redirectTo = AppConfig.webOAuthRedirectTo(Uri.base);
+      if (redirectTo == null || redirectTo.isEmpty) {
+        throw const AuthException(
+          'OAuth redirect yapılandırılmadı (OAUTH_REDIRECT_ORIGIN).',
+        );
+      }
       await client.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: Uri.base.origin,
+        redirectTo: redirectTo,
       );
       return;
     }

@@ -1,7 +1,6 @@
 -- =============================================================================
--- Quasar.io — Gerçek istemci yük testi (sim hesap bootstrap)
--- Her sim oyuncu ayrı auth oturumu açar; bu RPC profili maça hazırlar.
--- SQL Editor'da çalıştırın.
+-- Quasar.io — High: anonymous üzerinden prepare_simulated_player elmas mint kapat
+-- SQL Editor'da çalıştırın (önceki load-test / security migration'larından sonra).
 -- =============================================================================
 
 create or replace function public.prepare_simulated_player(
@@ -32,7 +31,8 @@ begin
     raise exception 'not authenticated';
   end if;
 
-  -- Anonymous Auth yolu kapalı (ücretsiz 500 elmas abuse).
+  -- Yalnızca admin_mint_sim_player ile üretilmiş sim hesaplar.
+  -- Anonymous Auth yolu kasıtlı olarak kapalı (ücretsiz 500 elmas abuse).
   v_ok :=
     coalesce(v_meta->>'is_sim', '') = 'true'
     or coalesce(v_email, '') like 'sim.%@quasar.sim.local'
@@ -51,7 +51,6 @@ begin
     12
   );
 
-  -- Kullanıcı adı çakışırsa benzersizleştir
   if exists (
     select 1 from public.profiles p
     where lower(trim(p.username)) = lower(v_name)
@@ -59,6 +58,8 @@ begin
   ) then
     v_name := left('S' || substr(replace(v_uid::text, '-', ''), 1, 11), 12);
   end if;
+
+  perform public._allow_trusted_profile_write();
 
   insert into public.profiles (
     id, username, diamonds, games_won, active_skin, updated_at
@@ -83,51 +84,4 @@ $$;
 revoke all on function public.prepare_simulated_player(text) from public, anon;
 grant execute on function public.prepare_simulated_player(text) to authenticated;
 
--- Admin: sim e-posta hesaplarını temizle (best-effort)
-create or replace function public.admin_cleanup_simulated_players()
-returns json
-language plpgsql
-security definer
-set search_path = public, auth
-as $$
-declare
-  v_ids uuid[];
-  v_n int := 0;
-begin
-  perform public._require_admin();
-
-  select coalesce(array_agg(u.id), '{}'::uuid[])
-  into v_ids
-  from auth.users u
-  where coalesce(u.raw_user_meta_data->>'is_sim', '') = 'true'
-     or coalesce(u.email, '') like 'sim.%@quasar.sim.local';
-
-  v_n := coalesce(cardinality(v_ids), 0);
-  if v_n = 0 then
-    return json_build_object('deleted', 0);
-  end if;
-
-  update public.game_room_members
-  set left_at = timezone('utc', now())
-  where user_id = any (v_ids)
-    and left_at is null;
-
-  delete from public.player_active_sessions where user_id = any (v_ids);
-
-  begin
-    delete from auth.identities where user_id = any (v_ids);
-    delete from auth.users where id = any (v_ids);
-  exception when others then
-    return json_build_object(
-      'deleted', 0,
-      'error', SQLERRM,
-      'candidates', v_n
-    );
-  end;
-
-  return json_build_object('deleted', v_n);
-end;
-$$;
-
-revoke all on function public.admin_cleanup_simulated_players() from public, anon;
-grant execute on function public.admin_cleanup_simulated_players() to authenticated;
+notify pgrst, 'reload schema';

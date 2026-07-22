@@ -3,6 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/safe_debug.dart';
+
 /// Persists the Supabase auth session in platform secure storage.
 ///
 /// - Android: EncryptedSharedPreferences
@@ -51,7 +53,7 @@ class SecureSessionLocalStorage extends LocalStorage {
         );
       }
     } catch (e, st) {
-      debugPrint('SecureSessionLocalStorage migrate: $e\n$st');
+      safeDebugPrint('SecureSessionLocalStorage migrate: $e\n$st');
     }
   }
 

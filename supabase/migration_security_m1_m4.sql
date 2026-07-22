@@ -19,17 +19,25 @@ create table if not exists public.admin_users (
 alter table public.admin_users enable row level security;
 revoke all on public.admin_users from public, anon, authenticated;
 
--- Mevcut sahip hesabını bir kez seed et (yalnızca SQL; client'ta e-posta yok).
+-- Mevcut sahip hesabını bir kez seed et.
+-- E-posta repoda tutulmaz — SQL Editor'da önce:
+--   select set_config('app.admin_seed_email', 'owner@example.com', false);
 insert into public.admin_users (user_id)
 select u.id
 from auth.users u
-where lower(coalesce(u.email, '')) = 'kenankisa@gmail.com'
+where lower(coalesce(u.email, '')) = lower(nullif(
+  trim(coalesce(current_setting('app.admin_seed_email', true), '')),
+  ''
+))
 on conflict (user_id) do nothing;
 
 update auth.users u
 set raw_app_meta_data =
   coalesce(u.raw_app_meta_data, '{}'::jsonb) || '{"role":"admin"}'::jsonb
-where lower(coalesce(u.email, '')) = 'kenankisa@gmail.com'
+where lower(coalesce(u.email, '')) = lower(nullif(
+  trim(coalesce(current_setting('app.admin_seed_email', true), '')),
+  ''
+))
   and coalesce(u.raw_app_meta_data->>'role', '') is distinct from 'admin';
 
 create or replace function public._is_admin_user(p_user_id uuid)

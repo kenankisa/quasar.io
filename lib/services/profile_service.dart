@@ -568,6 +568,28 @@ class ProfileService {
     return response.toString();
   }
 
+  /// Marks the ad session as watched (after [AdService] onUserEarnedReward).
+  Future<bool> attestRewardedMatchDouble({
+    required RoomType roomType,
+    required String roomInstanceId,
+    required String sessionId,
+  }) async {
+    final userId = _userId;
+    if (userId == null) return false;
+    if (roomType == RoomType.simple) return false;
+    if (sessionId.isEmpty) return false;
+
+    await _client.rpc(
+      'attest_rewarded_match_double',
+      params: {
+        'p_room_type': roomType.name,
+        'p_room_instance_id': roomInstanceId,
+        'p_session_id': sessionId,
+      },
+    );
+    return true;
+  }
+
   /// Rewarded ad: grant a second copy of this match's diamond reward.
   /// Requires a prior [applyMatchResult] reward claim + [sessionId] from prepare.
   Future<PlayerProfile?> claimRewardedMatchDouble({

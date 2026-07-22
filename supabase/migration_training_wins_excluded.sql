@@ -44,8 +44,9 @@ as $$
   );
 $$;
 
-revoke all on function public._needs_first_login_lock(uuid) from public, anon;
-grant execute on function public._needs_first_login_lock(uuid) to authenticated;
+revoke all on function public._needs_first_login_lock(uuid)
+  from public, anon, authenticated;
+-- İstemci EXECUTE yok; join_game_room* içinden çağrılır.
 
 -- -----------------------------------------------------------------------------
 -- 3) apply_match_result — simple 1.’likte v_won = 0 + tutorial_completed

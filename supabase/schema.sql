@@ -1,6 +1,13 @@
 -- =============================================================================
 -- Quasar.io — Supabase SQL (SQL Editor'da tek seferde çalıştırın)
 -- Proje: https://supabase.com/dashboard → SQL → New query → Run
+--
+-- UYARI (güvenlik): Bu dosya yalnızca yeşil saha bootstrap'tır.
+-- Canlı / prod kurulumda MUTLAKA sırayla security + economy migration'larını
+-- da uygulayın (migration_economy_security.sql, migration_security_m1_m4.sql,
+-- migration_security_m5.sql … migration_security_high_fixes.sql,
+-- migration_security_medium_fixes.sql, migration_security_high_anon_sim_mint.sql).
+-- Yalnızca schema.sql ile bırakmak ekonomi / PII yüzeylerini zayıf bırakır.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -52,18 +59,20 @@ alter table public.leaderboard
   add column if not exists updated_at timestamptz;
 
 -- -----------------------------------------------------------------------------
--- 2) ROW LEVEL SECURITY (RLS)
+-- 2) ROW LEVEL SECURITY (RLS) — sıkı baseline (açık SELECT / istemci skor yazma yok)
 -- -----------------------------------------------------------------------------
 
 alter table public.profiles enable row level security;
 alter table public.leaderboard enable row level security;
 alter table public.user_skins enable row level security;
 
--- profiles
+-- profiles: yalnızca kendi satırı (herkese açık profil scrape kapalı)
 drop policy if exists "Profilleri herkes görebilir" on public.profiles;
-create policy "Profilleri herkes görebilir"
+drop policy if exists "Kullanıcı kendi profilini görebilir" on public.profiles;
+create policy "Kullanıcı kendi profilini görebilir"
   on public.profiles for select
-  using (true);
+  to authenticated
+  using (auth.uid() = id);
 
 drop policy if exists "Kullanıcılar kendi profillerini güncelleyebilir" on public.profiles;
 create policy "Kullanıcılar kendi profillerini güncelleyebilir"
@@ -71,22 +80,21 @@ create policy "Kullanıcılar kendi profillerini güncelleyebilir"
   using (auth.uid() = id)
   with check (auth.uid() = id);
 
--- leaderboard
+revoke select on public.profiles from anon;
+
+-- leaderboard: doğrudan istemci yazma yok — save_leaderboard_score RPC kullan
 drop policy if exists "Skorları herkes görebilir" on public.leaderboard;
-create policy "Skorları herkes görebilir"
-  on public.leaderboard for select
-  using (true);
-
 drop policy if exists "Kullanıcılar kendi skorlarını ekleyebilir" on public.leaderboard;
-create policy "Kullanıcılar kendi skorlarını ekleyebilir"
-  on public.leaderboard for insert
-  with check (auth.uid() = user_id);
-
 drop policy if exists "Kullanıcılar kendi skorlarını güncelleyebilir" on public.leaderboard;
-create policy "Kullanıcılar kendi skorlarını güncelleyebilir"
-  on public.leaderboard for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+drop policy if exists "Kullanıcı kendi skorunu görebilir" on public.leaderboard;
+create policy "Kullanıcı kendi skorunu görebilir"
+  on public.leaderboard for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+revoke select, insert, update, delete on public.leaderboard from anon, public;
+revoke insert, update, delete on public.leaderboard from authenticated;
+grant select on public.leaderboard to authenticated;
 
 -- user_skins
 drop policy if exists "Görünümleri sahipleri görebilir" on public.user_skins;
@@ -171,7 +179,7 @@ end;
 $$;
 
 grant execute on function public.get_user_rank(uuid) to authenticated;
-grant execute on function public.get_user_rank(uuid) to anon;
+-- anon'a vermeyin: sıralama/PII probing yüzeyi.
 
 -- -----------------------------------------------------------------------------
 -- 5) RPC — GÜVENLİ SKOR KAYDI (isteğe bağlı, hile önleme)

@@ -27,7 +27,7 @@ typedef MatchEndCallback = void Function(
 /// Supabase Realtime Broadcast bridge for in-room player sync.
 ///
 /// Outbound kimlikler [auth.uid] ile zorlanır; inbound olaylar oda üyesi
-/// allowlist'ine göre süzülür (broadcast spoof azaltma).
+/// allowlist + `sender_id` ile süzülür (broadcast spoof azaltma).
 class RealtimeRoomService {
   RealtimeRoomService._();
   static final RealtimeRoomService instance = RealtimeRoomService._();
@@ -120,14 +120,22 @@ class RealtimeRoomService {
         .onBroadcast(
           event: 'universe_victory',
           callback: (payload) {
-            final winnerId = payload['id'] as String? ?? '';
-            final winnerName = payload['name'] as String? ?? 'Champion';
-            final elapsed = _readElapsedSeconds(payload);
-            final isBot = payload['is_bot'] == true;
-            final winnerRankPoints = payload['rank_points'] as int? ??
-                payload['diamonds'] as int?;
+            final map = Map<String, dynamic>.from(payload);
+            final winnerId = map['id'] as String? ?? '';
+            final winnerName = map['name'] as String? ?? 'Champion';
+            final elapsed = _readElapsedSeconds(map);
+            final isBot = map['is_bot'] == true;
+            final senderId = _readSenderId(map);
+            final winnerRankPoints = map['rank_points'] as int? ??
+                map['diamonds'] as int?;
             if (winnerId == _localPlayerId) return;
-            if (!_isAllowedMatchEndId(winnerId, isBot: isBot)) return;
+            if (!_isAllowedMatchEnd(
+              winnerId: winnerId,
+              isBot: isBot,
+              senderId: senderId,
+            )) {
+              return;
+            }
             onRemoteVictory?.call(
               winnerId,
               winnerName,
@@ -140,14 +148,22 @@ class RealtimeRoomService {
         .onBroadcast(
           event: 'room_closed',
           callback: (payload) {
-            final winnerId = payload['id'] as String? ?? '';
-            final winnerName = payload['name'] as String? ?? 'Champion';
-            final elapsed = _readElapsedSeconds(payload);
-            final isBot = payload['is_bot'] == true;
-            final winnerRankPoints = payload['rank_points'] as int? ??
-                payload['diamonds'] as int?;
+            final map = Map<String, dynamic>.from(payload);
+            final winnerId = map['id'] as String? ?? '';
+            final winnerName = map['name'] as String? ?? 'Champion';
+            final elapsed = _readElapsedSeconds(map);
+            final isBot = map['is_bot'] == true;
+            final senderId = _readSenderId(map);
+            final winnerRankPoints = map['rank_points'] as int? ??
+                map['diamonds'] as int?;
             if (winnerId == _localPlayerId) return;
-            if (!_isAllowedMatchEndId(winnerId, isBot: isBot)) return;
+            if (!_isAllowedMatchEnd(
+              winnerId: winnerId,
+              isBot: isBot,
+              senderId: senderId,
+            )) {
+              return;
+            }
             onRoomClosed?.call(
               winnerId,
               winnerName,
@@ -205,6 +221,7 @@ class RealtimeRoomService {
     required String playerId,
     required String playerName,
     required double elapsedSeconds,
+    required String senderId,
     bool isBot = false,
     int? rankPoints,
   }) {
@@ -212,6 +229,7 @@ class RealtimeRoomService {
       'id': playerId,
       'name': playerName,
       'elapsed': elapsedSeconds,
+      'sender_id': senderId,
       if (isBot) 'is_bot': true,
       if (!isBot && rankPoints != null) 'rank_points': rankPoints,
     };
@@ -229,6 +247,7 @@ class RealtimeRoomService {
       playerId: playerId,
       playerName: playerName,
       elapsedSeconds: elapsedSeconds,
+      senderId: uid,
       rankPoints: rankPoints,
     );
     _channel?.sendBroadcastMessage(
@@ -256,12 +275,18 @@ class RealtimeRoomService {
         playerId.startsWith('bot:');
     if (!allowedId) return;
     if (!isBot && playerId != uid) return;
+    if (isBot &&
+        playerId != 'system:abandoned' &&
+        !playerId.startsWith('bot:')) {
+      return;
+    }
     _channel?.sendBroadcastMessage(
       event: 'room_closed',
       payload: _matchEndPayload(
         playerId: playerId,
         playerName: playerName,
         elapsedSeconds: elapsedSeconds,
+        senderId: uid,
         isBot: isBot,
       ),
     );
@@ -271,6 +296,12 @@ class RealtimeRoomService {
     final raw = payload['elapsed'];
     if (raw is num) return raw.toDouble();
     return 0;
+  }
+
+  static String? _readSenderId(Map<String, dynamic> payload) {
+    final raw = payload['sender_id'];
+    if (raw is String && raw.isNotEmpty) return raw;
+    return null;
   }
 
   void broadcastLeave() {
@@ -328,10 +359,28 @@ class RealtimeRoomService {
     return _allowedPlayerIds.contains(id);
   }
 
-  bool _isAllowedMatchEndId(String id, {required bool isBot}) {
-    if (isBot || id.startsWith('bot:')) return true;
-    if (id == 'system:abandoned') return true;
-    return _isAllowedMember(id);
+  /// Match-end spoof koruması: gönderen oda üyesi olmalı.
+  ///
+  /// - İnsan zaferi / kapanış: `sender_id == winnerId` ve üye.
+  /// - Bot / abandoned: yalnızca `bot:…` / `system:abandoned` + `is_bot`,
+  ///   ve gönderen üye (üye olmayanların `is_bot: true` ile kapatması engellenir).
+  bool _isAllowedMatchEnd({
+    required String winnerId,
+    required bool isBot,
+    required String? senderId,
+  }) {
+    if (senderId == null || !_isAllowedMember(senderId)) return false;
+
+    final isSynthetic =
+        winnerId == 'system:abandoned' || winnerId.startsWith('bot:');
+    if (isSynthetic) {
+      return isBot;
+    }
+
+    // İnsan kazanan: is_bot bayrağı kabul edilmez; yalnızca kendi zaferini duyurabilir.
+    if (isBot) return false;
+    if (!_isAllowedMember(winnerId)) return false;
+    return senderId == winnerId;
   }
 
   void _startMemberRefresh() {

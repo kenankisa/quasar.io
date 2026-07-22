@@ -14,6 +14,7 @@ class RewardDoubleAdButton extends StatefulWidget {
     required this.baseDiamonds,
     required this.ensureBaseClaimed,
     required this.prepareSession,
+    required this.attestSession,
     required this.claimDouble,
     this.primaryColor = const Color(0xFFFFD700),
     this.foregroundColor = Colors.black,
@@ -22,6 +23,7 @@ class RewardDoubleAdButton extends StatefulWidget {
   final int baseDiamonds;
   final Future<bool> Function() ensureBaseClaimed;
   final Future<String?> Function() prepareSession;
+  final Future<bool> Function(String sessionId) attestSession;
   final Future<PlayerProfile?> Function(String sessionId) claimDouble;
   final Color primaryColor;
   final Color foregroundColor;
@@ -96,6 +98,14 @@ class _RewardDoubleAdButtonState extends State<RewardDoubleAdButton> {
           }
           return;
         }
+
+        final attested = await widget.attestSession(sessionId);
+        if (!attested) {
+          if (mounted) {
+            setState(() => _statusKey = 'reward_double_grant_failed');
+          }
+          return;
+        }
         _pendingGrant = true;
       }
 
@@ -137,7 +147,8 @@ class _RewardDoubleAdButtonState extends State<RewardDoubleAdButton> {
       String key = _pendingGrant
           ? 'reward_double_grant_failed'
           : 'reward_double_ad_failed';
-      if (msg.contains('ad_watch_too_short')) {
+      if (msg.contains('ad_watch_too_short') ||
+          msg.contains('ad_not_attested')) {
         key = 'reward_double_claim_wait';
       } else if (msg.contains('ad_double_daily_limit') ||
           msg.contains('ad_session') ||

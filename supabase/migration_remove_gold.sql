@@ -343,7 +343,6 @@ declare
   v_uid uuid := auth.uid();
   v_email text;
   v_meta jsonb;
-  v_app jsonb;
   v_name text;
   v_ok boolean := false;
 begin
@@ -351,8 +350,8 @@ begin
     raise exception 'not authenticated';
   end if;
 
-  select u.email, u.raw_user_meta_data, u.raw_app_meta_data
-  into v_email, v_meta, v_app
+  select u.email, u.raw_user_meta_data
+  into v_email, v_meta
   from auth.users u
   where u.id = v_uid;
 
@@ -360,12 +359,11 @@ begin
     raise exception 'not authenticated';
   end if;
 
+  -- Yalnızca mint edilmiş sim hesaplar (anonymous yolu kapalı).
   v_ok :=
     coalesce(v_meta->>'is_sim', '') = 'true'
     or coalesce(v_email, '') like 'sim.%@quasar.sim.local'
-    or coalesce(v_email, '') like 'sim.%@example.com'
-    or coalesce(v_app->>'provider', '') = 'anonymous'
-    or coalesce(v_app->'providers', '[]'::jsonb) ? 'anonymous';
+    or coalesce(v_email, '') like 'sim.%@example.com';
 
   if not v_ok then
     raise exception 'forbidden';

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// Supabase / Google / AdMob yapılandırması.
 ///
 /// Hassas değerler kaynak kodda tutulmaz — build zamanında verilir:
@@ -22,11 +24,15 @@ class AppConfig {
   /// Geçici test: yeni oturumlarda kullanılacak başlangıç elması.
   static const int devStartingDiamonds = 500;
 
-  /// Geçici test: tüm odaları kilitsiz göster.
-  static const bool devUnlockAllRooms = bool.fromEnvironment(
+  static const bool _devUnlockAllRoomsDefine = bool.fromEnvironment(
     'DEV_UNLOCK_ALL_ROOMS',
     defaultValue: false,
   );
+
+  /// Lobby UI kilidi — yalnızca debug + dart-define ile.
+  /// Release/profile'da asla açılmaz (sunucu join eşiği zaten zorunlu).
+  static bool get devUnlockAllRooms =>
+      kDebugMode && _devUnlockAllRoomsDefine;
 
   /// AdMob app IDs — native manifest/plist also need these for store builds.
   /// Android: dart_defines / ANDROID_ADMOB_APP_ID env (see android/app/build.gradle.kts).
@@ -66,4 +72,26 @@ class AppConfig {
       iosAdMobAppId.contains('3940256099942544') ||
       androidRewardedDoubleAdUnitId.contains('3940256099942544') ||
       iosRewardedDoubleAdUnitId.contains('3940256099942544');
+
+  /// Web OAuth redirect origin allowlist (exact match).
+  /// Empty → fall back to [Uri.base.origin] only for localhost / 127.0.0.1.
+  static const String oauthRedirectOrigin = String.fromEnvironment(
+    'OAUTH_REDIRECT_ORIGIN',
+  );
+
+  /// Safe web OAuth redirect. Prefer exact [oauthRedirectOrigin] allowlist.
+  static String? webOAuthRedirectTo(Uri pageUri) {
+    final origin = pageUri.origin;
+    final allowed = oauthRedirectOrigin.trim();
+    if (allowed.isNotEmpty) {
+      // Always use configured origin so a malicious page host cannot redirect.
+      return allowed;
+    }
+    final host = pageUri.host.toLowerCase();
+    if (host == 'localhost' || host == '127.0.0.1') {
+      return origin;
+    }
+    // Production web builds should set OAUTH_REDIRECT_ORIGIN.
+    return origin;
+  }
 }
