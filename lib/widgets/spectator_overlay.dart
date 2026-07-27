@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../game/orbit_game.dart';
-import '../services/lang_service.dart';
 import '../utils/match_time.dart';
 import 'bot_name_badge.dart';
 
@@ -20,7 +20,7 @@ class SpectatorOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
 
     return ListenableBuilder(
       listenable: Listenable.merge([

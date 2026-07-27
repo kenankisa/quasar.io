@@ -398,7 +398,7 @@ class _StreamEmitter extends PositionComponent {
     if (_bridgeLength < 1 || _intensity <= 0.05) return;
 
     _spawnTimer -= dt;
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final interval =
         ((lite ? 0.14 : 0.08) - _intensity * 0.03).clamp(0.05, 0.16);
     if (_spawnTimer > 0) return;

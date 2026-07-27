@@ -45,7 +45,7 @@ abstract final class CosmicParticlePresets {
     required double duration,
     int? seed,
   }) {
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final count = lite ? 8 : 14;
     final rng = math.Random(seed ?? preyRadius.round() * 9973);
 
@@ -96,7 +96,7 @@ abstract final class CosmicParticlePresets {
     required double maxRadius,
     required double duration,
   }) {
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final count = lite ? 18 : 32;
     final rng = math.Random(maxRadius.round() * 7919);
 
@@ -143,7 +143,7 @@ abstract final class CosmicParticlePresets {
     required double charge,
     required Color accent,
   }) {
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final count = lite ? 4 : 7;
     final duration = lite ? 0.28 : 0.36;
     final rng = math.Random((holeRadius * charge * 1000).round());
@@ -187,7 +187,7 @@ abstract final class CosmicParticlePresets {
     required double intensity,
     required int seed,
   }) {
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final count = lite ? 10 : 18;
     final rng = math.Random(seed);
     final lifespan = (0.42 + intensity * 0.35).clamp(0.35, 0.85);
@@ -251,7 +251,7 @@ abstract final class CosmicParticlePresets {
     required double intensity,
     required int seed,
   }) {
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final count = lite ? 4 : 7;
     final rng = math.Random(seed ^ 0x9e3779b9);
     final lifespan = 0.38 + intensity * 0.22;
@@ -302,7 +302,7 @@ abstract final class CosmicParticlePresets {
     required double direction,
     required double duration,
   }) {
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final count = lite ? 10 : 18;
     final rng = math.Random((length * 97 + direction * 13).round());
 
@@ -348,7 +348,7 @@ abstract final class CosmicParticlePresets {
     required Color accent,
     required double duration,
   }) {
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final count = lite ? 6 : 10;
     final rng = math.Random(photonR.round());
 

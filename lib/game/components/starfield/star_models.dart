@@ -94,7 +94,7 @@ class _StarLayer {
   void generate(double worldSize, {bool fullBudget = false}) {
     final rng = math.Random(seed);
     final liteFactor =
-        (!fullBudget && CanvasEffects.mobileLiteMode) ? 0.5 : 1.0;
+        (!fullBudget && CanvasEffects.economyMode) ? 0.5 : 1.0;
     final budget = liteFactor < 1.0
         ? (count * liteFactor).round().clamp(1, count)
         : count;

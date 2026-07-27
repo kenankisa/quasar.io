@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../game/orbit_game.dart';
-import '../services/lang_service.dart';
 import '../game/config/first_match_tuning.dart';
 import '../utils/responsive_layout.dart';
 
@@ -22,7 +22,7 @@ class FirstMatchHintOverlay extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final r = ResponsiveLayout.of(context);
     final hintKey = elapsed < 12
         ? 'first_match_hint_move'

@@ -12,8 +12,11 @@ import '../utils/hole_swallow_visual.dart';
 class HoleSwallowManager extends Component with HasGameReference<OrbitGame> {
   HoleSwallowManager() : super(priority: 4);
 
+  static const _rebuildHz = 20.0;
+
   List<SwallowPair> _pairs = const [];
   Map<int, SwallowEntityState> _states = const {};
+  double _rebuildAccum = 0;
 
   SwallowEntityState stateFor(Vector2 position, double radius) {
     return _states[swallowEntityKey(position, radius)] ?? SwallowEntityState.none;
@@ -22,6 +25,9 @@ class HoleSwallowManager extends Component with HasGameReference<OrbitGame> {
   @override
   void update(double dt) {
     super.update(dt);
+    _rebuildAccum += dt;
+    if (_rebuildAccum < 1 / _rebuildHz) return;
+    _rebuildAccum = 0;
     _rebuild();
   }
 
@@ -33,30 +39,12 @@ class HoleSwallowManager extends Component with HasGameReference<OrbitGame> {
       bool isLocal,
     })>[];
 
-    if (!game.player.isEliminated) {
+    for (final entry in game.holeIndex.entries) {
       holes.add((
-        position: game.player.position,
-        radius: game.player.radius,
-        accent: const Color(0xFFFFAA44),
-        isLocal: true,
-      ));
-    }
-    for (final bot in game.botPopulation.bots) {
-      if (bot.isEliminated) continue;
-      holes.add((
-        position: bot.position,
-        radius: bot.radius,
-        accent: bot.accentColor,
-        isLocal: false,
-      ));
-    }
-    for (final enemy in game.enemyPlayers) {
-      if (enemy.isEliminated) continue;
-      holes.add((
-        position: enemy.position,
-        radius: enemy.radius,
-        accent: const Color(0xFF5599EE),
-        isLocal: false,
+        position: entry.position,
+        radius: entry.radius,
+        accent: entry.accent,
+        isLocal: entry.isLocalPlayer,
       ));
     }
 

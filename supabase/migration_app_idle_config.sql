@@ -18,7 +18,13 @@ insert into public.app_idle_config (id, config) values
     'matchIdleBeforeWarningSeconds', 10,
     'matchWarningCountdownSeconds', 3,
     'matchMassDrainPerSecond', 20,
-    'matchKickMassThreshold', 25
+    'matchKickMassThreshold', 25,
+    'hardcoreAfkLateGameRadius', 450,
+    'hardcoreMatchIdleBeforeWarningSeconds', 15,
+    'hardcoreMatchIdleBeforeWarningLateSeconds', 10,
+    'hardcoreMatchWarningCountdownSeconds', 3,
+    'hardcoreMatchMassDrainPerSecond', 7,
+    'hardcoreMatchMassDrainLatePerSecond', 10
   ))
 on conflict (id) do nothing;
 

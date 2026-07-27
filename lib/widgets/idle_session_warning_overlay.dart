@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../services/app_idle_config_service.dart';
-import '../services/lang_service.dart';
 import '../services/player_session_service.dart';
 
 /// Lobi: geri sayımlı çıkış uyarısı.
@@ -80,7 +80,7 @@ class _IdleWarningBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final config = AppIdleConfigService.instance.config;
 
     final title = switch (mode) {
@@ -101,10 +101,16 @@ class _IdleWarningBanner extends StatelessWidget {
       _IdleBannerMode.matchCountdown => lang
           .t('idle_match_countdown_message')
           .replaceAll('{seconds}', '$seconds')
-          .replaceAll('{drain}', '${config.matchMassDrainPerSecond}'),
+          .replaceAll(
+            '{drain}',
+            '${PlayerSessionService.instance.effectiveMatchMassDrainPerSecond}',
+          ),
       _IdleBannerMode.matchDrain => lang
           .t('idle_match_message')
-          .replaceAll('{drain}', '${config.matchMassDrainPerSecond}')
+          .replaceAll(
+            '{drain}',
+            '${PlayerSessionService.instance.effectiveMatchMassDrainPerSecond}',
+          )
           .replaceAll('{threshold}', '${config.matchKickMassThreshold}'),
     };
 

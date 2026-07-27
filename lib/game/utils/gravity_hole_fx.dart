@@ -24,7 +24,7 @@ class GravityHoleFx {
   }) {
     if (intensity < 0.12) return;
 
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     if (lite && intensity < 0.35) return;
 
     final streams = lite ? 4 : 6;
@@ -158,7 +158,7 @@ class GravityHoleFx {
 
     final angle = math.atan2(predatorOffset.dy, predatorOffset.dx);
     final disintegration = ((proximity - 0.70) / 0.30).clamp(0.0, 1.0);
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final count = lite ? 3 : (4 + (fragmentLevel * 4).round()).clamp(4, 7);
 
     canvas.save();

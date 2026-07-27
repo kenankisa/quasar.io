@@ -120,10 +120,28 @@ class GravityPhysicsManager extends Component with HasGameReference<OrbitGame> {
   // ---------------------------------------------------------------------
 
   void _applyGravity(List<_HoleRef> holes, double dt) {
+    final index = game.holeIndex;
+    if (index.entries.isEmpty) return;
+
+    final partnerToRef = {for (final hole in holes) hole.partner: hole};
+
     for (var i = 0; i < holes.length; i++) {
-      for (var j = i + 1; j < holes.length; j++) {
-        _applyPairGravity(holes[i], holes[j], dt);
-      }
+      final a = holes[i];
+      final sourceIndex = index.indexOf(a.partner);
+      if (sourceIndex == null) continue;
+      final queryRadius = GravityScaling.influenceRadius(a.radius) * 1.05;
+      final source = index.entries[sourceIndex];
+
+      index.forEachPairCandidate(
+        source: source,
+        sourceIndex: i,
+        queryRadius: queryRadius,
+        visit: (other, _) {
+          final b = partnerToRef[other.partner];
+          if (b == null) return;
+          _applyPairGravity(a, b, dt);
+        },
+      );
     }
   }
 
@@ -251,17 +269,32 @@ class GravityPhysicsManager extends Component with HasGameReference<OrbitGame> {
 
     final candidates =
         <({_HoleRef a, _HoleRef b, double distance})>[];
-    for (var i = 0; i < holes.length; i++) {
-      for (var j = i + 1; j < holes.length; j++) {
-        final a = holes[i];
-        final b = holes[j];
-        if (busy.contains(a.partner) || busy.contains(b.partner)) continue;
-        if (!_canMergePair(a.partner, b.partner)) continue;
+    final index = game.holeIndex;
+    final maxOtherRadius = game.universeVictoryRadius;
 
-        final distance = a.position.distanceTo(b.position);
-        if (distance > (a.radius + b.radius) * inspiralOnsetRadii) continue;
-        candidates.add((a: a, b: b, distance: distance));
-      }
+    for (var i = 0; i < holes.length; i++) {
+      final a = holes[i];
+      if (busy.contains(a.partner)) continue;
+
+      final sourceIndex = index.indexOf(a.partner);
+      if (sourceIndex == null) continue;
+      final queryRadius = (a.radius + maxOtherRadius) * inspiralOnsetRadii;
+      final source = index.entries[sourceIndex];
+
+      index.forEachPairCandidate(
+        source: source,
+        sourceIndex: i,
+        queryRadius: queryRadius,
+        visit: (other, otherIndex) {
+          final b = holes[otherIndex];
+          if (busy.contains(b.partner)) return;
+          if (!_canMergePair(a.partner, b.partner)) return;
+
+          final distance = a.position.distanceTo(b.position);
+          if (distance > (a.radius + b.radius) * inspiralOnsetRadii) return;
+          candidates.add((a: a, b: b, distance: distance));
+        },
+      );
     }
 
     candidates.sort((x, y) => x.distance.compareTo(y.distance));

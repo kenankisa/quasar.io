@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../game/models/app_idle_config.dart';
 import '../services/app_idle_config_service.dart';
-import '../services/lang_service.dart';
 
 /// Yönetici: lobi + maç AFK süreleri ve kütle cezası.
 class AdminIdleSettingsPanel extends StatelessWidget {
@@ -18,7 +18,7 @@ class AdminIdleSettingsPanel extends StatelessWidget {
         final service = AppIdleConfigService.instance;
         final config = service.config;
         final defaults = AppIdleConfig.defaults;
-        final lang = LanguageService.instance;
+        final lang = context.lang;
         final saving = service.saving;
         final dirty = service.hasUnsavedChanges;
 
@@ -228,7 +228,7 @@ class _IdleSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Column(

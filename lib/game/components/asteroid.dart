@@ -8,6 +8,7 @@ import '../utils/consumable_tidal_spin.dart';
 import '../utils/cosmic_body_renderer.dart';
 import '../utils/gravity_visual.dart';
 import '../utils/viewport_cull.dart';
+import 'gravity_matter.dart';
 
 /// Collectible rock sizes.
 /// Asteroids: growth 1–2. Meteorites (göktaşı): growth 3. Basit oda: growth ~3–4.5.
@@ -35,7 +36,7 @@ enum CosmicRockType {
       this == CosmicRockType.giantAsteroid;
 }
 
-class Asteroid extends PositionComponent {
+class Asteroid extends PositionComponent implements GravityMatter {
   Asteroid({
     required Vector2 position,
     this.rockType = CosmicRockType.smallAsteroid,
@@ -54,12 +55,15 @@ class Asteroid extends PositionComponent {
        );
 
   final CosmicRockType rockType;
+  @override
   final double collisionRadius;
   final double growthValue;
   final bool isFragment;
+  @override
   final Vector2 velocity;
   final int _shapeSeed;
 
+  @override
   bool active = true;
   double _rotation = 0;
 

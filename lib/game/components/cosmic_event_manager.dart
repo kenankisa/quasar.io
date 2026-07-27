@@ -36,7 +36,11 @@ class CosmicEventManager extends Component with HasGameReference<OrbitGame> {
   static const dustTrailInterval = 0.07;
   static const sharedMeteorSlotSeconds = 0.05;
 
-  static int get maxLiveDust => CanvasEffects.mobileLiteMode ? 90 : 180;
+  static int get maxLiveDust {
+    if (CanvasEffects.lowPerformanceMode) return 45;
+    if (CanvasEffects.economyMode) return 90;
+    return 180;
+  }
 
   final _rng = math.Random();
 
@@ -672,15 +676,7 @@ class CosmicEventManager extends Component with HasGameReference<OrbitGame> {
     _eventPlanets.remove(planet);
     if (growth <= 0) return;
 
-    if (consumer == game.player) {
-      game.spawnManager.distributeGrowth(growth);
-    } else {
-      final paced = growth *
-          game.roomConfig.foodGrowthMultiplier *
-          _pacing.lateGrowthMultiplier(consumer.holeRadius);
-      consumer.growBy(paced);
-      consumer.recordAbsorb();
-    }
+    game.spawnManager.applyGrowthFor(growth, consumer);
     HapticService.instance.lightImpact();
   }
 
@@ -706,15 +702,7 @@ class CosmicEventManager extends Component with HasGameReference<OrbitGame> {
     if (!dust.active || !_meteorDust.contains(dust)) return;
     dust.deactivate();
     _meteorDust.remove(dust);
-    if (consumer == game.player) {
-      game.spawnManager.distributeGrowth(dust.growthValue);
-    } else {
-      final paced = dust.growthValue *
-          game.roomConfig.foodGrowthMultiplier *
-          _pacing.lateGrowthMultiplier(consumer.holeRadius);
-      consumer.growBy(paced);
-      consumer.recordAbsorb();
-    }
+    game.spawnManager.applyGrowthFor(dust.growthValue, consumer);
     HapticService.instance.lightImpact();
   }
 }

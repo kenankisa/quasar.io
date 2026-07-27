@@ -148,5 +148,26 @@ class _SpaceSpec {
             supernovaInterval: (28.0, 52.0),
             galacticCoreGlow: true,
           ),
+        RoomType.hardcore => _SpaceSpec(
+            washA: UniversePalette.washA(RoomType.hardcore),
+            washB: UniversePalette.washB(RoomType.hardcore),
+            nebulaPalettes: const [
+              (Color(0xFF6A2010), Color(0xFFFF7040)),
+              (Color(0xFF8A2818), Color(0xFFFF9060)),
+              (Color(0xFF501810), Color(0xFFFF5830)),
+            ],
+            nebulaCount: 10,
+            nebulaAlpha: 1.2,
+            galaxyCount: 5,
+            bandStrength: 0.95,
+            bandStarCount: 620,
+            bandWarmth: 0.85,
+            cometMax: 2,
+            cometInterval: (12.0, 22.0),
+            meteorInterval: (4.0, 8.0),
+            pulsarCount: 2,
+            supernovaInterval: (32.0, 56.0),
+            galacticCoreGlow: true,
+          ),
       };
 }

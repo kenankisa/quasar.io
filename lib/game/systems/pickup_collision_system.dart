@@ -11,6 +11,9 @@ import '../components/quasar_fragment.dart';
 import '../components/shield_powerup.dart';
 
 /// Shared food / mine / shield pickup checks for local player and bots.
+///
+/// Spawn-manager collectibles use a per-frame spatial index for broad-phase
+/// culling; event rewards stay linear (low count).
 abstract final class PickupCollisionSystem {
   PickupCollisionSystem._();
 
@@ -38,41 +41,54 @@ abstract final class PickupCollisionSystem {
     final pos = consumer.position;
     final r = consumer.holeRadius;
 
-    for (final mine in List<CosmicMine>.from(spawn.mines)) {
-      if (!mine.active) continue;
-      if (consumer.isSpawnProtected) continue;
-      if (r <= CosmicMine.triggerRadius) continue;
-      if (overlaps(
-        pos,
-        r,
-        mine.position,
-        CosmicMine.collisionRadius,
-        factor: mineOverlapFactor,
-      )) {
-        spawn.triggerMineExplosionFor(mine, consumer);
+    spawn.forEachPickupNear(pos, r, (ref) {
+      switch (ref.kind) {
+        case SpawnPickupKind.mine:
+          final mine = ref.entity as CosmicMine;
+          if (!mine.active) return;
+          if (consumer.isSpawnProtected) return;
+          if (r <= CosmicMine.triggerRadius) return;
+          if (overlaps(
+            pos,
+            r,
+            mine.position,
+            CosmicMine.collisionRadius,
+            factor: mineOverlapFactor,
+          )) {
+            spawn.triggerMineExplosionFor(mine, consumer);
+          }
+        case SpawnPickupKind.asteroid:
+          final asteroid = ref.entity as Asteroid;
+          if (!asteroid.active) return;
+          if (overlaps(pos, r, asteroid.position, asteroid.collisionRadius)) {
+            spawn.absorbAsteroidFor(asteroid, consumer);
+          }
+        case SpawnPickupKind.planet:
+          final planet = ref.entity as Planet;
+          if (!planet.active) return;
+          if (overlaps(pos, r, planet.position, planet.collisionRadius)) {
+            spawn.absorbPlanetFor(planet, consumer);
+          }
+        case SpawnPickupKind.quasarFragment:
+          final fragment = ref.entity as QuasarFragment;
+          if (!fragment.active) return;
+          if (overlaps(pos, r, fragment.position, fragment.collisionRadius)) {
+            spawn.absorbQuasarFragmentFor(fragment, consumer);
+          }
+        case SpawnPickupKind.shield:
+          final shield = ref.entity as ShieldPowerUp;
+          if (!shield.active) return;
+          if (overlaps(
+            pos,
+            r,
+            shield.position,
+            ShieldPowerUp.collisionRadius,
+            factor: 1,
+          )) {
+            spawn.collectShieldFor(shield, consumer);
+          }
       }
-    }
-
-    for (final asteroid in List<Asteroid>.from(spawn.asteroids)) {
-      if (!asteroid.active) continue;
-      if (overlaps(pos, r, asteroid.position, asteroid.collisionRadius)) {
-        spawn.absorbAsteroidFor(asteroid, consumer);
-      }
-    }
-
-    for (final planet in List<Planet>.from(spawn.planets)) {
-      if (!planet.active) continue;
-      if (overlaps(pos, r, planet.position, planet.collisionRadius)) {
-        spawn.absorbPlanetFor(planet, consumer);
-      }
-    }
-
-    for (final fragment in List<QuasarFragment>.from(spawn.quasarFragments)) {
-      if (!fragment.active) continue;
-      if (overlaps(pos, r, fragment.position, fragment.collisionRadius)) {
-        spawn.absorbQuasarFragmentFor(fragment, consumer);
-      }
-    }
+    });
 
     for (final planet in List<Planet>.from(events.eventPlanets)) {
       if (!planet.active) continue;
@@ -85,13 +101,6 @@ abstract final class PickupCollisionSystem {
       if (!dust.active) continue;
       if (overlaps(pos, r, dust.position, dustCollisionRadius, factor: 1)) {
         events.absorbMeteorDustFor(dust, consumer);
-      }
-    }
-
-    for (final shield in List<ShieldPowerUp>.from(spawn.shields)) {
-      if (!shield.active) continue;
-      if (overlaps(pos, r, shield.position, ShieldPowerUp.collisionRadius, factor: 1)) {
-        spawn.collectShieldFor(shield, consumer);
       }
     }
   }

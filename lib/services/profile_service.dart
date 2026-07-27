@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -7,10 +8,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../game/config/skill_tree_config.dart';
 import '../game/room_type.dart';
 import '../utils/player_name.dart';
+import '../utils/player_rank.dart';
+import 'admin_access.dart';
 import 'auth_service.dart';
 
 enum ProfileUpdateError {
   usernameTaken,
+  usernameReserved,
   invalidUsername,
   notAuthenticated,
   unknown,
@@ -38,6 +42,12 @@ class PlayerProfile {
     required this.activeSkin,
     this.peakDiamonds = 0,
     this.skillLevels = const {},
+    this.trophyWinsSimple = 0,
+    this.trophyWinsNormal = 0,
+    this.trophyWinsElite = 0,
+    this.trophyWinsUnique = 0,
+    this.hardcorePoints = 0,
+    this.hardcoreCooldownUntil,
   });
 
   factory PlayerProfile.fromJson(Map<String, dynamic> json) {
@@ -56,7 +66,20 @@ class PlayerProfile {
       activeSkin: json['active_skin'] as String? ?? 'default',
       peakDiamonds: peak < diamonds ? diamonds : peak,
       skillLevels: _parseSkillTree(json['skill_tree']),
+      trophyWinsSimple: _asInt(json['trophy_wins_simple']).clamp(0, 1),
+      trophyWinsNormal: _asInt(json['trophy_wins_normal']).clamp(0, 3),
+      trophyWinsElite: _asInt(json['trophy_wins_elite']).clamp(0, 3),
+      trophyWinsUnique: _asInt(json['trophy_wins_unique']).clamp(0, 3),
+      hardcorePoints: _asInt(json['hardcore_points']),
+      hardcoreCooldownUntil: _readDateTime(json['hardcore_cooldown_until']),
     );
+  }
+
+  static DateTime? _readDateTime(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value.toUtc();
+    if (value is String) return DateTime.tryParse(value)?.toUtc();
+    return null;
   }
 
   static int _asInt(Object? value, [int fallback = 0]) {
@@ -106,6 +129,52 @@ class PlayerProfile {
   final int peakDiamonds;
   final Map<String, int> skillLevels;
 
+  /// Per-universe 1st-place cups (lobby). Caps: simple 1, others 3.
+  final int trophyWinsSimple;
+  final int trophyWinsNormal;
+  final int trophyWinsElite;
+  final int trophyWinsUnique;
+
+  /// Hardcore victories (1 point = 1 hardcore win).
+  final int hardcorePoints;
+
+  /// Cannot join hardcore until this UTC time (after win or elimination).
+  final DateTime? hardcoreCooldownUntil;
+
+  static const hardcoreTrophyRequirement =
+      RoomTypeLobby.hardcoreTrophyRequirement;
+
+  bool get isHardcoreOnCooldown {
+    final until = hardcoreCooldownUntil;
+    if (until == null) return false;
+    return until.isAfter(DateTime.now().toUtc());
+  }
+
+  Duration? get hardcoreCooldownRemaining {
+    final until = hardcoreCooldownUntil;
+    if (until == null) return null;
+    final left = until.difference(DateTime.now().toUtc());
+    return left.isNegative ? null : left;
+  }
+
+  int trophyWinsFor(RoomType type) => switch (type) {
+        RoomType.simple => trophyWinsSimple,
+        RoomType.normal => trophyWinsNormal,
+        RoomType.elite => trophyWinsElite,
+        RoomType.unique => trophyWinsUnique,
+        RoomType.hardcore => 0,
+      };
+
+  int get totalUniverseTrophies =>
+      trophyWinsSimple +
+      trophyWinsNormal +
+      trophyWinsElite +
+      trophyWinsUnique;
+
+  /// Hardcore arena unlock — all universe cups collected.
+  bool get hasHardcoreTrophyUnlock =>
+      totalUniverseTrophies >= hardcoreTrophyRequirement;
+
   int get earnedSkillPoints => AbilityLoadout.earnedSp(peakDiamonds);
   int get spentSkillPoints => AbilityLoadout.spentSp(skillLevels);
   int get availableSkillPoints => AbilityLoadout.availableSp(
@@ -129,6 +198,12 @@ class PlayerProfile {
     String? activeSkin,
     int? peakDiamonds,
     Map<String, int>? skillLevels,
+    int? trophyWinsSimple,
+    int? trophyWinsNormal,
+    int? trophyWinsElite,
+    int? trophyWinsUnique,
+    int? hardcorePoints,
+    DateTime? hardcoreCooldownUntil,
   }) {
     return PlayerProfile(
       id: id,
@@ -141,6 +216,13 @@ class PlayerProfile {
       activeSkin: activeSkin ?? this.activeSkin,
       peakDiamonds: peakDiamonds ?? this.peakDiamonds,
       skillLevels: skillLevels ?? this.skillLevels,
+      trophyWinsSimple: trophyWinsSimple ?? this.trophyWinsSimple,
+      trophyWinsNormal: trophyWinsNormal ?? this.trophyWinsNormal,
+      trophyWinsElite: trophyWinsElite ?? this.trophyWinsElite,
+      trophyWinsUnique: trophyWinsUnique ?? this.trophyWinsUnique,
+      hardcorePoints: hardcorePoints ?? this.hardcorePoints,
+      hardcoreCooldownUntil:
+          hardcoreCooldownUntil ?? this.hardcoreCooldownUntil,
     );
   }
 }
@@ -153,6 +235,7 @@ class GlobalLeaderboardEntry {
     required this.diamonds,
     this.gamesWon = 0,
     this.rankPoints = 0,
+    this.hardcorePoints = 0,
     this.isLocal = false,
   });
 
@@ -162,12 +245,14 @@ class GlobalLeaderboardEntry {
   final int diamonds;
   final int gamesWon;
   final int rankPoints;
+  final int hardcorePoints;
   final bool isLocal;
 }
 
 enum GlobalLeaderboardSort {
   rank,
-  wealth;
+  wealth,
+  hardcore;
 
   String get rpcValue => name;
 }
@@ -191,6 +276,9 @@ class ProfileService {
     AuthService.instance.authStateChanges.listen((authState) {
       if (authState.session == null) {
         _publishProfile(null);
+        dailyChestAvailable.value = null;
+        dailyChestNextAvailableAt.value = null;
+        matchDayDiamondNotifier.value = null;
       }
     });
   }
@@ -207,6 +295,17 @@ class ProfileService {
   /// Lobide ve zafer ekranında güncel elmas göstermek için.
   final ValueNotifier<PlayerProfile?> profileNotifier =
       ValueNotifier<PlayerProfile?>(null);
+
+  /// UTC daily chest — true when unclaimed today, false when claimed, null unknown.
+  final ValueNotifier<bool?> dailyChestAvailable = ValueNotifier<bool?>(null);
+
+  /// Next UTC reset when today's chest is already claimed.
+  final ValueNotifier<DateTime?> dailyChestNextAvailableAt =
+      ValueNotifier<DateTime?>(null);
+
+  /// Rolling 24h match placement diamonds vs economy cap (reward UI).
+  final ValueNotifier<MatchDayDiamondStatus?> matchDayDiamondNotifier =
+      ValueNotifier<MatchDayDiamondStatus?>(null);
 
   void _publishProfile(PlayerProfile? profile) {
     profileNotifier.value = profile;
@@ -257,6 +356,10 @@ class ProfileService {
     final trimmed = username.trim();
     if (!isValidUsername(trimmed)) {
       throw const ProfileUpdateException(ProfileUpdateError.invalidUsername);
+    }
+    if (isReservedAdminUsername(trimmed) &&
+        !AdminAccess.isCurrentUserAdmin) {
+      throw const ProfileUpdateException(ProfileUpdateError.usernameReserved);
     }
 
     try {
@@ -349,6 +452,9 @@ class ProfileService {
 
   ProfileUpdateException _mapProfileException(PostgrestException e) {
     final message = e.message.toLowerCase();
+    if (message.contains('username_reserved')) {
+      return const ProfileUpdateException(ProfileUpdateError.usernameReserved);
+    }
     if (message.contains('username_taken') || e.code == '23505') {
       return const ProfileUpdateException(ProfileUpdateError.usernameTaken);
     }
@@ -397,9 +503,11 @@ class ProfileService {
     final topRaw = (map['top'] as List?) ?? const [];
     final localInTop = map['local_in_top'] == true;
     final sortRaw = (map['sort'] as String?)?.toLowerCase();
-    final resolvedSort = sortRaw == 'wealth'
-        ? GlobalLeaderboardSort.wealth
-        : GlobalLeaderboardSort.rank;
+    final resolvedSort = switch (sortRaw) {
+      'wealth' => GlobalLeaderboardSort.wealth,
+      'hardcore' => GlobalLeaderboardSort.hardcore,
+      _ => GlobalLeaderboardSort.rank,
+    };
 
     final topPlayers = <GlobalLeaderboardEntry>[];
     for (final raw in topRaw) {
@@ -413,27 +521,37 @@ class ProfileService {
           diamonds: (row['diamonds'] as num?)?.toInt() ?? 0,
           gamesWon: (row['games_won'] as num?)?.toInt() ?? 0,
           rankPoints: (row['rank_points'] as num?)?.toInt() ?? 0,
+          hardcorePoints: (row['hardcore_points'] as num?)?.toInt() ?? 0,
           isLocal: id == userId,
         ),
       );
     }
 
+    // Her sekmede (Rütbe / Zenginlik / Hardcore) en altta "SENİN SIRAN"
+    // — top 100 içinde olsan bile sticky satırda görünür.
     GlobalLeaderboardEntry? localPlayer;
-    if (!localInTop) {
-      final localRaw = map['local'];
-      if (localRaw is Map) {
-        final row = Map<String, dynamic>.from(localRaw);
-        final rankPos = (row['rank_pos'] as num?)?.toInt() ?? 0;
-        if (rankPos > 0) {
-          localPlayer = GlobalLeaderboardEntry(
-            rank: rankPos,
-            userId: row['user_id'] as String? ?? userId,
-            username: clampPlayerName(row['username'] as String? ?? 'Traveler'),
-            diamonds: (row['diamonds'] as num?)?.toInt() ?? 0,
-            gamesWon: (row['games_won'] as num?)?.toInt() ?? 0,
-            rankPoints: (row['rank_points'] as num?)?.toInt() ?? 0,
-            isLocal: true,
-          );
+    final localRaw = map['local'];
+    if (localRaw is Map) {
+      final row = Map<String, dynamic>.from(localRaw);
+      final rankPos = (row['rank_pos'] as num?)?.toInt() ?? 0;
+      if (rankPos > 0) {
+        localPlayer = GlobalLeaderboardEntry(
+          rank: rankPos,
+          userId: row['user_id'] as String? ?? userId,
+          username: clampPlayerName(row['username'] as String? ?? 'Traveler'),
+          diamonds: (row['diamonds'] as num?)?.toInt() ?? 0,
+          gamesWon: (row['games_won'] as num?)?.toInt() ?? 0,
+          rankPoints: (row['rank_points'] as num?)?.toInt() ?? 0,
+          hardcorePoints: (row['hardcore_points'] as num?)?.toInt() ?? 0,
+          isLocal: true,
+        );
+      }
+    }
+    if (localPlayer == null) {
+      for (final entry in topPlayers) {
+        if (entry.isLocal) {
+          localPlayer = entry;
+          break;
         }
       }
     }
@@ -540,10 +658,78 @@ class ProfileService {
               : roomInstanceId,
         },
       );
-      return await fetchProfile();
-    } catch (e) {
-      _publishProfile(previous);
-      rethrow;
+      final profile = await fetchProfile();
+      if (!eliminated) {
+        unawaited(refreshMatchDayDiamonds());
+      }
+      return profile;
+    } catch (e, stackTrace) {
+      debugPrint('applyMatchResult: $e\n$stackTrace');
+      return previous;
+    }
+  }
+
+  /// Hardcore: absorb another real player → diamonds (server-verified).
+  /// [aliveCount] is the arena population at kill time (includes prey).
+  Future<PlayerProfile?> applyHardcoreKillReward({
+    required String roomInstanceId,
+    required String preyUserId,
+    int? aliveCount,
+  }) async {
+    final userId = _userId;
+    if (userId == null) return null;
+    try {
+      await _client.rpc(
+        'apply_hardcore_kill_reward',
+        params: {
+          'p_room_instance_id': roomInstanceId,
+          'p_prey_user_id': preyUserId,
+          'p_alive_count': ?aliveCount,
+        },
+      );
+      return fetchProfile();
+    } catch (e, stackTrace) {
+      debugPrint('applyHardcoreKillReward: $e\n$stackTrace');
+      return profileNotifier.value;
+    }
+  }
+
+  /// Hardcore passive mode (&lt; min-alive): no kill/elim diamonds, 5 min cooldown.
+  Future<PlayerProfile?> applyHardcorePassiveElim({
+    required String? roomInstanceId,
+  }) async {
+    final userId = _userId;
+    if (userId == null) return null;
+    if (roomInstanceId == null || roomInstanceId.isEmpty) return null;
+
+    final previous = profileNotifier.value;
+    try {
+      await _client.rpc(
+        'apply_hardcore_passive_elim',
+        params: {'p_room_instance_id': roomInstanceId},
+      );
+      return fetchProfile();
+    } catch (e, stackTrace) {
+      debugPrint('applyHardcorePassiveElim: $e\n$stackTrace');
+      return previous;
+    }
+  }
+
+  /// Rolling 24h match reward diamonds vs dailyMatchDiamondCap.
+  Future<MatchDayDiamondStatus?> refreshMatchDayDiamonds() async {
+    final userId = _userId;
+    if (userId == null) {
+      matchDayDiamondNotifier.value = null;
+      return null;
+    }
+    try {
+      final response = await _client.rpc('get_match_diamond_day_status');
+      final status = MatchDayDiamondStatus.fromRpc(response);
+      matchDayDiamondNotifier.value = status;
+      return status;
+    } catch (e, st) {
+      debugPrint('refreshMatchDayDiamonds failed: $e\n$st');
+      return matchDayDiamondNotifier.value;
     }
   }
 
@@ -693,4 +879,167 @@ class ProfileService {
       rethrow;
     }
   }
+
+  /// UTC daily lobby chest — available until claimed once per calendar day.
+  Future<DailyChestStatus?> fetchDailyChestStatus() async {
+    final userId = _userId;
+    if (userId == null) {
+      dailyChestAvailable.value = null;
+      dailyChestNextAvailableAt.value = null;
+      return null;
+    }
+    try {
+      final response = await _client.rpc('get_daily_lobby_chest_status');
+      final status = DailyChestStatus.fromRpc(response);
+      dailyChestAvailable.value = status.available;
+      dailyChestNextAvailableAt.value =
+          status.available ? null : status.nextAvailableAt;
+      return status;
+    } catch (e, st) {
+      debugPrint('fetchDailyChestStatus failed: $e\n$st');
+      return null;
+    }
+  }
+
+  /// Claims today's chest (base from economy config; [doubled] → ×2). Idempotent per UTC day.
+  /// Admins bypass the daily limit (server-side).
+  Future<DailyChestClaimResult> claimDailyLobbyChest({
+    bool doubled = false,
+  }) async {
+    final userId = _userId;
+    if (userId == null) {
+      return const DailyChestClaimResult(
+        ok: false,
+        reason: 'not_authenticated',
+      );
+    }
+
+    final previous = profileNotifier.value;
+    try {
+      final response = await _client.rpc(
+        'claim_daily_lobby_chest',
+        params: {'p_doubled': doubled},
+      );
+      final result = DailyChestClaimResult.fromRpc(response);
+      if (result.ok) {
+        await fetchProfile();
+        // Admins stay available; normal players flip to claimed.
+        await fetchDailyChestStatus();
+      } else if (result.reason == 'already_claimed') {
+        dailyChestAvailable.value = false;
+        dailyChestNextAvailableAt.value = result.nextAvailableAt;
+      }
+      return result;
+    } on PostgrestException catch (e, st) {
+      debugPrint('claimDailyLobbyChest failed: $e\n$st');
+      _publishProfile(previous);
+      return DailyChestClaimResult(
+        ok: false,
+        reason: e.message,
+      );
+    } catch (e, st) {
+      debugPrint('claimDailyLobbyChest failed: $e\n$st');
+      _publishProfile(previous);
+      return const DailyChestClaimResult(ok: false, reason: 'unknown');
+    }
+  }
+}
+
+class DailyChestStatus {
+  const DailyChestStatus({
+    required this.available,
+    this.claimDay,
+    this.nextAvailableAt,
+    this.adminBypass = false,
+  });
+
+  factory DailyChestStatus.fromRpc(Object? raw) {
+    final map = _asStringKeyedMap(raw);
+    return DailyChestStatus(
+      available: map['available'] == true,
+      claimDay: map['claim_day']?.toString(),
+      nextAvailableAt: _parseTimestamptz(map['next_available_at']),
+      adminBypass: map['admin_bypass'] == true,
+    );
+  }
+
+  final bool available;
+  final String? claimDay;
+  final DateTime? nextAvailableAt;
+  final bool adminBypass;
+}
+
+class MatchDayDiamondStatus {
+  const MatchDayDiamondStatus({
+    required this.earned,
+    required this.cap,
+  });
+
+  factory MatchDayDiamondStatus.fromRpc(Object? raw) {
+    final map = _asStringKeyedMap(raw);
+    return MatchDayDiamondStatus(
+      earned: _rpcInt(map['earned']) ?? 0,
+      cap: (_rpcInt(map['cap']) ?? 120).clamp(1, 5000),
+    );
+  }
+
+  final int earned;
+  final int cap;
+}
+
+class DailyChestClaimResult {
+  const DailyChestClaimResult({
+    required this.ok,
+    this.awarded,
+    this.baseAwarded,
+    this.doubled = false,
+    this.diamonds,
+    this.reason,
+    this.nextAvailableAt,
+    this.adminBypass = false,
+  });
+
+  factory DailyChestClaimResult.fromRpc(Object? raw) {
+    final map = _asStringKeyedMap(raw);
+    return DailyChestClaimResult(
+      ok: map['ok'] == true,
+      awarded: _rpcInt(map['awarded']),
+      baseAwarded: _rpcInt(map['base_awarded']),
+      doubled: map['doubled'] == true,
+      diamonds: _rpcInt(map['diamonds']),
+      reason: map['reason']?.toString(),
+      nextAvailableAt: _parseTimestamptz(map['next_available_at']),
+      adminBypass: map['admin_bypass'] == true,
+    );
+  }
+
+  final bool ok;
+  final int? awarded;
+  final int? baseAwarded;
+  final bool doubled;
+  final int? diamonds;
+  final String? reason;
+  final DateTime? nextAvailableAt;
+  final bool adminBypass;
+}
+
+Map<String, dynamic> _asStringKeyedMap(Object? raw) {
+  if (raw is Map<String, dynamic>) return raw;
+  if (raw is Map) {
+    return raw.map((k, v) => MapEntry(k.toString(), v));
+  }
+  return const {};
+}
+
+int? _rpcInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
+DateTime? _parseTimestamptz(Object? value) {
+  if (value == null) return null;
+  if (value is DateTime) return value.toUtc();
+  return DateTime.tryParse(value.toString())?.toUtc();
 }

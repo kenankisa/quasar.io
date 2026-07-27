@@ -6,24 +6,36 @@ import 'package:flutter/material.dart';
 
 import '../../services/haptic_service.dart';
 import '../config/first_match_tuning.dart';
-import '../config/match_pacing.dart';
 import '../config/room_config.dart';
-import '../orbit_game.dart';
 import '../config/room_visual_theme.dart';
+import '../orbit_game.dart';
 import '../room_type.dart';
+import '../systems/growth_system.dart';
 import '../utils/canvas_effects.dart';
 import '../utils/gravity_motion.dart';
 import '../utils/gravity_scaling.dart';
 import '../utils/world_positions.dart';
+import '../utils/world_spatial_index.dart';
 import 'asteroid.dart';
 import 'black_hole_partner.dart';
 import 'bot_player.dart';
+import 'gravity_matter.dart';
 import 'hole_swallow_burst_effect.dart';
 import 'quasar_fragment.dart';
 import 'cosmic_mine.dart';
 import 'explosion_effect.dart';
 import 'planet.dart';
 import 'shield_powerup.dart';
+
+/// Tagged reference for spatial pickup queries.
+enum SpawnPickupKind { asteroid, planet, quasarFragment, mine, shield }
+
+class SpawnPickupRef {
+  const SpawnPickupRef(this.kind, this.entity);
+
+  final SpawnPickupKind kind;
+  final Object entity;
+}
 
 class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
   CosmicSpawnManager({required this.config});
@@ -35,22 +47,31 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
   final List<CosmicMine> _mines = [];
   final List<ShieldPowerUp> _shields = [];
   final _rng = math.Random();
+  late final WorldSpatialIndex<SpawnPickupRef> _pickupIndex;
 
   static const respawnDelay = Duration(milliseconds: 1500);
   static const shieldRespawnDelay = Duration(seconds: 45);
 
-  MatchPacing get _pacing => MatchPacing.forRoom(game.roomType);
+  /// Max collectible radius + margin for spatial pickup queries.
+  static const _pickupQueryMargin = 120.0;
+
+  GrowthSystem get _growth => game.matchRules.growthContext(
+        matchElapsed: game.matchElapsed,
+        isBotOnlyRoom: game.isBotOnlyRoom,
+      );
 
   Duration get _collectibleRespawnDelay => Duration(
         milliseconds:
-            (respawnDelay.inMilliseconds * _pacing.respawnDelayMultiplier)
+            (respawnDelay.inMilliseconds *
+                    game.matchRules.pacing.respawnDelayMultiplier)
                 .round()
                 .clamp(600, respawnDelay.inMilliseconds),
       );
 
   List<Asteroid> get asteroids => List.unmodifiable(_asteroids);
   List<Planet> get planets => List.unmodifiable(_planets);
-  List<QuasarFragment> get quasarFragments => List.unmodifiable(_quasarFragments);
+  List<QuasarFragment> get quasarFragments =>
+      List.unmodifiable(_quasarFragments);
   List<CosmicMine> get mines => List.unmodifiable(_mines);
   List<ShieldPowerUp> get shields => List.unmodifiable(_shields);
 
@@ -76,46 +97,47 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+    _pickupIndex = WorldSpatialIndex(worldSize: game.worldSize);
 
     for (var i = 0; i < config.asteroidCount; i++) {
       await _spawnAsteroid(rockType: _randomAsteroidType());
-      if (CanvasEffects.mobileLiteMode && i.isOdd) {
+      if (CanvasEffects.economyMode && i.isOdd) {
         await Future<void>.delayed(Duration.zero);
       }
     }
     for (var i = 0; i < config.asteroidTier6Count; i++) {
       await _spawnAsteroid(rockType: CosmicRockType.largeAsteroid);
-      if (CanvasEffects.mobileLiteMode && i.isOdd) {
+      if (CanvasEffects.economyMode && i.isOdd) {
         await Future<void>.delayed(Duration.zero);
       }
     }
     for (var i = 0; i < config.asteroidTier7Count; i++) {
       await _spawnAsteroid(rockType: CosmicRockType.xlargeAsteroid);
-      if (CanvasEffects.mobileLiteMode && i.isOdd) {
+      if (CanvasEffects.economyMode && i.isOdd) {
         await Future<void>.delayed(Duration.zero);
       }
     }
     for (var i = 0; i < config.asteroidTier8Count; i++) {
       await _spawnAsteroid(rockType: CosmicRockType.giantAsteroid);
-      if (CanvasEffects.mobileLiteMode && i.isOdd) {
+      if (CanvasEffects.economyMode && i.isOdd) {
         await Future<void>.delayed(Duration.zero);
       }
     }
     for (var i = 0; i < config.meteoriteCount; i++) {
       await _spawnAsteroid(rockType: CosmicRockType.meteorite);
-      if (CanvasEffects.mobileLiteMode && i.isOdd) {
+      if (CanvasEffects.economyMode && i.isOdd) {
         await Future<void>.delayed(Duration.zero);
       }
     }
     for (var i = 0; i < config.planetCount; i++) {
       await _spawnPlanet(colorIndex: i);
-      if (CanvasEffects.mobileLiteMode && i.isOdd) {
+      if (CanvasEffects.economyMode && i.isOdd) {
         await Future<void>.delayed(Duration.zero);
       }
     }
     for (var i = 0; i < config.quasarFragmentCount; i++) {
       await _spawnQuasarFragment();
-      if (CanvasEffects.mobileLiteMode && i.isOdd) {
+      if (CanvasEffects.economyMode && i.isOdd) {
         await Future<void>.delayed(Duration.zero);
       }
     }
@@ -130,9 +152,91 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
       await spawnStarterClusterNear(game.player.position);
     } else if (game.roomType == RoomType.unique ||
         game.roomType == RoomType.elite) {
-      // Large maps + sparse global food: always seed a pocket near spawn so
-      // the first viewport isn't an empty void around the player.
       await spawnNearbyRoomFood(game.player.position);
+    }
+  }
+
+  @override
+  void update(double dt) {
+    super.update(dt);
+    _rebuildPickupIndex();
+  }
+
+  void forEachPickupNear(
+    Vector2 center,
+    double holeRadius,
+    void Function(SpawnPickupRef ref) visit,
+  ) {
+    _pickupIndex.forEachNear(
+      center,
+      holeRadius + _pickupQueryMargin,
+      (ref, _) => visit(ref),
+    );
+  }
+
+  /// Food-only spatial query for bot farming AI.
+  void forEachFoodNear(
+    Vector2 center,
+    double searchRadius,
+    void Function(Vector2 position, double growthValue) visit,
+  ) {
+    forEachPickupNear(center, searchRadius, (ref) {
+      switch (ref.kind) {
+        case SpawnPickupKind.asteroid:
+          final asteroid = ref.entity as Asteroid;
+          if (!asteroid.active || asteroid.isFragment) return;
+          visit(asteroid.position, asteroid.growthValue);
+        case SpawnPickupKind.planet:
+          final planet = ref.entity as Planet;
+          if (!planet.active) return;
+          visit(planet.position, planet.growthValue);
+        case SpawnPickupKind.quasarFragment:
+          final fragment = ref.entity as QuasarFragment;
+          if (!fragment.active) return;
+          visit(fragment.position, fragment.growthValue);
+        case SpawnPickupKind.mine:
+        case SpawnPickupKind.shield:
+          return;
+      }
+    });
+  }
+
+  void _rebuildPickupIndex() {
+    _pickupIndex.clear();
+    for (final asteroid in _asteroids) {
+      if (!asteroid.active) continue;
+      _pickupIndex.insert(
+        asteroid.position,
+        SpawnPickupRef(SpawnPickupKind.asteroid, asteroid),
+      );
+    }
+    for (final planet in _planets) {
+      if (!planet.active) continue;
+      _pickupIndex.insert(
+        planet.position,
+        SpawnPickupRef(SpawnPickupKind.planet, planet),
+      );
+    }
+    for (final fragment in _quasarFragments) {
+      if (!fragment.active) continue;
+      _pickupIndex.insert(
+        fragment.position,
+        SpawnPickupRef(SpawnPickupKind.quasarFragment, fragment),
+      );
+    }
+    for (final mine in _mines) {
+      if (!mine.active) continue;
+      _pickupIndex.insert(
+        mine.position,
+        SpawnPickupRef(SpawnPickupKind.mine, mine),
+      );
+    }
+    for (final shield in _shields) {
+      if (!shield.active) continue;
+      _pickupIndex.insert(
+        shield.position,
+        SpawnPickupRef(SpawnPickupKind.shield, shield),
+      );
     }
   }
 
@@ -190,7 +294,6 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
     }
   }
 
-  /// Size 1–2 only (normal rooms).
   CosmicRockType _randomAsteroidType() {
     return _rng.nextDouble() < 0.62
         ? CosmicRockType.smallAsteroid
@@ -266,87 +369,138 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
     _shields.add(shield);
   }
 
-  void absorbAsteroid(Asteroid asteroid) {
-    absorbAsteroidFor(asteroid, game.player);
-  }
+  void absorbAsteroid(Asteroid asteroid) =>
+      absorbAsteroidFor(asteroid, game.player);
 
   void absorbAsteroidFor(Asteroid asteroid, BlackHolePartner consumer) {
-    if (!asteroid.active) return;
-    final index = _asteroids.indexOf(asteroid);
-    final rockType = asteroid.rockType;
-    final preyPos = asteroid.position.clone();
-    final preyRadius = asteroid.collisionRadius;
-    asteroid.deactivate();
-    _distributeGrowthTo(asteroid.growthValue, consumer);
-    _spawnConsumableSwallowBurst(
-      consumer: consumer,
-      preyPosition: preyPos,
-      preyRadius: preyRadius,
+    _absorbConsumable(
+      isActive: () => asteroid.active,
+      deactivate: asteroid.deactivate,
+      index: _asteroids.indexOf(asteroid),
+      onRemoved: (index) {
+        final rockType = asteroid.rockType;
+        _asteroids.removeAt(index);
+        if (!asteroid.isFragment) {
+          _scheduleAsteroidRespawn(rockType);
+        }
+      },
+      growthValue: asteroid.growthValue,
+      preyPosition: asteroid.position,
+      preyRadius: asteroid.collisionRadius,
       accent: RoomVisualTheme.forRoom(game.roomType).accent,
+      consumer: consumer,
     );
-    HapticService.instance.lightImpact();
-
-    if (index >= 0 && !asteroid.isFragment) {
-      _asteroids.removeAt(index);
-      _scheduleAsteroidRespawn(rockType);
-    }
   }
 
-  void absorbPlanet(Planet planet) {
-    absorbPlanetFor(planet, game.player);
-  }
+  void absorbPlanet(Planet planet) => absorbPlanetFor(planet, game.player);
 
   void absorbPlanetFor(Planet planet, BlackHolePartner consumer) {
-    if (!planet.active) return;
     final colorIndex = planet.colorIndex;
-    final index = _planets.indexOf(planet);
-    final preyPos = planet.position.clone();
-    final preyRadius = planet.collisionRadius;
-    planet.deactivate();
-    _distributeGrowthTo(planet.growthValue, consumer);
-    _spawnConsumableSwallowBurst(
-      consumer: consumer,
-      preyPosition: preyPos,
-      preyRadius: preyRadius,
+    _absorbConsumable(
+      isActive: () => planet.active,
+      deactivate: planet.deactivate,
+      index: _planets.indexOf(planet),
+      onRemoved: (index) {
+        _planets.removeAt(index);
+        _schedulePlanetRespawn(colorIndex);
+      },
+      growthValue: planet.growthValue,
+      preyPosition: planet.position,
+      preyRadius: planet.collisionRadius,
       accent: RoomVisualTheme.forRoom(game.roomType).accent,
+      consumer: consumer,
+      onAfterGrowth: () =>
+          game.triggerQuasarActivation(consumer, planet.growthValue),
     );
-    HapticService.instance.lightImpact();
-    // Full-planet consumption — Stage 4 quasar activation reference beat.
-    game.triggerQuasarActivation(consumer, planet.growthValue);
-
-    if (index >= 0) {
-      _planets.removeAt(index);
-      _schedulePlanetRespawn(colorIndex);
-    }
   }
 
-  void absorbQuasarFragment(QuasarFragment fragment) {
-    absorbQuasarFragmentFor(fragment, game.player);
-  }
+  void absorbQuasarFragment(QuasarFragment fragment) =>
+      absorbQuasarFragmentFor(fragment, game.player);
 
   void absorbQuasarFragmentFor(
     QuasarFragment fragment,
     BlackHolePartner consumer,
   ) {
-    if (!fragment.active) return;
-    final index = _quasarFragments.indexOf(fragment);
-    final preyPos = fragment.position.clone();
-    final preyRadius = fragment.collisionRadius;
-    fragment.deactivate();
-    _distributeGrowthTo(fragment.growthValue, consumer);
+    _absorbConsumable(
+      isActive: () => fragment.active,
+      deactivate: fragment.deactivate,
+      index: _quasarFragments.indexOf(fragment),
+      onRemoved: (index) {
+        _quasarFragments.removeAt(index);
+        _scheduleQuasarFragmentRespawn();
+      },
+      growthValue: fragment.growthValue,
+      preyPosition: fragment.position,
+      preyRadius: fragment.collisionRadius,
+      accent: RoomVisualTheme.forRoom(game.roomType).secondaryAccent,
+      consumer: consumer,
+      onAfterGrowth: () =>
+          game.triggerQuasarActivation(consumer, fragment.growthValue),
+    );
+  }
+
+  void _absorbConsumable({
+    required bool Function() isActive,
+    required void Function() deactivate,
+    required int index,
+    required void Function(int index) onRemoved,
+    required double growthValue,
+    required Vector2 preyPosition,
+    required double preyRadius,
+    required Color accent,
+    required BlackHolePartner consumer,
+    void Function()? onAfterGrowth,
+  }) {
+    if (!isActive()) return;
+    final preyPos = preyPosition.clone();
+    deactivate();
+    _applyGrowth(growthValue, consumer);
     _spawnConsumableSwallowBurst(
       consumer: consumer,
       preyPosition: preyPos,
       preyRadius: preyRadius,
-      accent: RoomVisualTheme.forRoom(game.roomType).secondaryAccent,
+      accent: accent,
     );
     HapticService.instance.lightImpact();
-    game.triggerQuasarActivation(consumer, fragment.growthValue);
+    onAfterGrowth?.call();
 
     if (index >= 0) {
-      _quasarFragments.removeAt(index);
-      _scheduleQuasarFragmentRespawn();
+      onRemoved(index);
     }
+  }
+
+  void _applyGrowth(double amount, BlackHolePartner consumer) {
+    final isPlayer = consumer == game.player;
+    final partner = isPlayer ? game.tacticalManager.activeLinkPartner : null;
+    _growth.apply(
+      amount,
+      consumer,
+      isPlayer: isPlayer,
+      bot: consumer is BotPlayer ? consumer : null,
+      linkPartner: partner,
+      isLinked: isPlayer && game.tacticalManager.isLinked,
+    );
+  }
+
+  /// Applies food growth for any hole (player, bot, or event reward).
+  void applyGrowthFor(double amount, BlackHolePartner consumer) {
+    _applyGrowth(amount, consumer);
+  }
+
+  /// Legacy entry point for event growth — delegates to [GrowthSystem].
+  void distributeGrowth(double amount) {
+    _applyGrowth(amount, game.player);
+  }
+
+  /// Scales growth without applying — used by cosmic events with burst caps.
+  double scaledGrowthFor(BlackHolePartner consumer, double base) {
+    final isPlayer = consumer == game.player;
+    return _growth.scaledAmount(
+      base,
+      consumer,
+      applyEarlyGameBonus: isPlayer,
+      bot: consumer is BotPlayer ? consumer : null,
+    );
   }
 
   void _spawnConsumableSwallowBurst({
@@ -378,49 +532,7 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
     );
   }
 
-  void _distributeGrowthTo(double amount, BlackHolePartner consumer) {
-    if (consumer == game.player) {
-      distributeGrowth(amount);
-      return;
-    }
-    // Same room food pacing as the player so bots don't close matches early.
-    final pacing = MatchPacing.forRoom(game.roomType);
-    amount *= config.foodGrowthMultiplier;
-    amount *= pacing.lateGrowthMultiplier(consumer.holeRadius);
-    if (consumer is BotPlayer && game.isBotOnlyRoom) {
-      amount *= consumer.isPreyBot
-          ? FirstMatchTuning.simpleRoomPreyGrowthMultiplier
-          : FirstMatchTuning.simpleRoomBotGrowthMultiplier;
-    }
-    consumer.growBy(amount);
-    consumer.recordAbsorb();
-  }
-
-  void distributeGrowth(double amount) {
-    final pacing = MatchPacing.forRoom(game.roomType);
-    var scaled = amount * config.foodGrowthMultiplier;
-    if (game.matchElapsed <= pacing.earlyGameDurationSeconds) {
-      scaled *= pacing.earlyGamePlayerGrowthMultiplier;
-    }
-    scaled *= pacing.lateGrowthMultiplier(game.player.holeRadius);
-
-    final partner = game.tacticalManager.activeLinkPartner;
-    if (partner != null && game.tacticalManager.isLinked) {
-      final half = scaled / 2;
-      game.player.growBy(half);
-      partner.growBy(half);
-      game.player.recordAbsorb();
-      partner.recordAbsorb();
-      return;
-    }
-
-    game.player.growBy(scaled);
-    game.player.recordAbsorb();
-  }
-
-  void collectShield(ShieldPowerUp shield) {
-    collectShieldFor(shield, game.player);
-  }
+  void collectShield(ShieldPowerUp shield) => collectShieldFor(shield, game.player);
 
   void collectShieldFor(ShieldPowerUp shield, BlackHolePartner consumer) {
     if (!shield.active) return;
@@ -439,9 +551,8 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
     }
   }
 
-  void triggerMineExplosion(CosmicMine mine) {
-    triggerMineExplosionFor(mine, game.player);
-  }
+  void triggerMineExplosion(CosmicMine mine) =>
+      triggerMineExplosionFor(mine, game.player);
 
   void triggerMineExplosionFor(CosmicMine mine, BlackHolePartner victim) {
     if (!mine.active) return;
@@ -534,90 +645,42 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
     final sources = game.activeGravitySources();
     if (sources.isEmpty) return;
 
-    for (final asteroid in _asteroids) {
-      if (!asteroid.active || asteroid.isFragment) continue;
-      if (!_nearAnyGravitySource(
-        asteroid.position,
-        asteroid.collisionRadius,
-        sources,
-        roomMultiplier,
-      )) {
-        continue;
-      }
-      for (final hole in sources) {
-        _pullEntityToward(
-          asteroid,
-          hole.position,
-          hole.radius,
+    void pullBatch(Iterable<GravityMatter> items, {bool skipFragments = false}) {
+      for (final item in items) {
+        if (!item.active) continue;
+        if (skipFragments && item is Asteroid && item.isFragment) continue;
+        if (!_nearAnyGravitySource(
+          item.position,
+          item.collisionRadius,
+          sources,
           roomMultiplier,
+        )) {
+          continue;
+        }
+        for (final hole in sources) {
+          GravityMotion.accelerateToward(
+            entityPosition: item.position,
+            entityVelocity: item.velocity,
+            sourcePosition: hole.position,
+            sourceRadius: hole.radius,
+            entityRadius: item.collisionRadius,
+            dt: dt,
+            roomMultiplier: roomMultiplier,
+          );
+        }
+        game.tacticalManager.applyLinkedGravityPull(
+          item as PositionComponent,
           dt,
-          entityRadius: asteroid.collisionRadius,
-          entityVelocity: asteroid.velocity,
+          roomMultiplier: roomMultiplier,
         );
       }
-      game.tacticalManager.applyLinkedGravityPull(
-        asteroid,
-        dt,
-        roomMultiplier: roomMultiplier,
-      );
     }
-    for (final planet in _planets) {
-      if (!planet.active) continue;
-      if (!_nearAnyGravitySource(
-        planet.position,
-        planet.collisionRadius,
-        sources,
-        roomMultiplier,
-      )) {
-        continue;
-      }
-      for (final hole in sources) {
-        _pullEntityToward(
-          planet,
-          hole.position,
-          hole.radius,
-          roomMultiplier,
-          dt,
-          entityRadius: planet.collisionRadius,
-          entityVelocity: planet.velocity,
-        );
-      }
-      game.tacticalManager.applyLinkedGravityPull(
-        planet,
-        dt,
-        roomMultiplier: roomMultiplier,
-      );
-    }
-    for (final fragment in _quasarFragments) {
-      if (!fragment.active) continue;
-      if (!_nearAnyGravitySource(
-        fragment.position,
-        fragment.collisionRadius,
-        sources,
-        roomMultiplier,
-      )) {
-        continue;
-      }
-      for (final hole in sources) {
-        _pullEntityToward(
-          fragment,
-          hole.position,
-          hole.radius,
-          roomMultiplier,
-          dt,
-          entityRadius: fragment.collisionRadius,
-          entityVelocity: fragment.velocity,
-        );
-      }
-      game.tacticalManager.applyLinkedGravityPull(
-        fragment,
-        dt,
-        roomMultiplier: roomMultiplier,
-      );
-    }
+
+    pullBatch(_asteroids, skipFragments: true);
+    pullBatch(_planets);
+    pullBatch(_quasarFragments);
   }
 
-  /// Skip the hole×entity pull loops when nothing is in influence range.
   bool _nearAnyGravitySource(
     Vector2 position,
     double entityRadius,
@@ -636,27 +699,6 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
     return false;
   }
 
-  void _pullEntityToward(
-    PositionComponent entity,
-    Vector2 sourcePosition,
-    double sourceRadius,
-    double roomMultiplier,
-    double dt, {
-    required double entityRadius,
-    required Vector2 entityVelocity,
-  }) {
-    GravityMotion.accelerateToward(
-      entityPosition: entity.position,
-      entityVelocity: entityVelocity,
-      sourcePosition: sourcePosition,
-      sourceRadius: sourceRadius,
-      entityRadius: entityRadius,
-      dt: dt,
-      roomMultiplier: roomMultiplier,
-    );
-  }
-
-  /// Normalized matter influx toward a hole (0–1) — drives accretion stream VFX.
   double influxIntensityAt(Vector2 holePosition, double holeRadius) {
     if (config.gravityMultiplier <= 0) return 0;
 

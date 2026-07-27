@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../game/config/match_afk_tempo.dart';
 import '../game/room_type.dart';
 import '../utils/app_navigator.dart';
+import 'admin_access.dart';
 import 'app_idle_config_service.dart';
 import 'auth_service.dart';
 import 'device_id_service.dart';
@@ -42,6 +45,7 @@ class PlayerSessionStatus {
 /// Maç içi AFK kütle eritme / yutulma ve sonuç ekranı çıkış kancaları.
 class MatchIdleHooks {
   const MatchIdleHooks({
+    required this.roomType,
     required this.massProvider,
     required this.onMassDrain,
     required this.onAfkEliminated,
@@ -49,6 +53,7 @@ class MatchIdleHooks {
     required this.onResultIdleLeave,
   });
 
+  final RoomType roomType;
   final double Function() massProvider;
   final void Function(double amount) onMassDrain;
   final Future<void> Function() onAfkEliminated;
@@ -65,7 +70,7 @@ class MatchIdleHooks {
 /// Lobi / maç dışı: hareketsizlik → uyarı geri sayımı → oturum kapanır.
 /// Maç (oynanırken): hareketsizlik → uyarı + kütle erimesi → yutulma + oturum kapanır.
 /// Maç sonucu (zafer / oda kapandı): 10 sn idle → 10 sn lobiye dönüş geri sayımı.
-/// Yönetici panelindeyken AFK askıya alınır; lobi/maçta admin de oyuncu gibidir.
+/// Yönetici panelindeyken ve admin hesaplarında AFK askıya alınır.
 class PlayerSessionService extends ChangeNotifier {
   PlayerSessionService._();
   static final PlayerSessionService instance = PlayerSessionService._();
@@ -84,8 +89,47 @@ class PlayerSessionService extends ChangeNotifier {
   bool _inMatch = false;
   /// Admin paneli açıkken true — AFK tick/expire çalışmaz.
   bool _idleSuppressed = false;
+  bool _adminListenerAttached = false;
   /// Reklam vb. kısa süreli pause (oturumu kapatmaz).
   int _matchIdlePauseDepth = 0;
+
+  /// Admin paneli veya sunucu-onaylı admin hesabı — AFK/idle uygulanmaz.
+  bool get _idleExempt =>
+      _idleSuppressed || AdminAccess.isCurrentUserAdmin;
+
+  void _ensureAdminListener() {
+    if (_adminListenerAttached) return;
+    _adminListenerAttached = true;
+    AdminAccess.instance.addListener(_syncIdleExemption);
+  }
+
+  void _syncIdleExemption() {
+    if (!_idleExempt) {
+      if (_claimed) {
+        _applyIdleWatchForCurrentUser();
+        _notifySafe();
+      }
+      return;
+    }
+    _stopIdleWatch();
+    _clearWarning(notify: false);
+    _clearMatchAfk(notify: false);
+    _clearMatchResultExit(notify: false);
+    _notifySafe();
+  }
+
+  /// Avoid setState-during-build when called from widget initState/dispose.
+  void _notifySafe() {
+    final phase = WidgetsBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.idle ||
+        phase == SchedulerPhase.postFrameCallbacks) {
+      notifyListeners();
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
+  }
 
   DateTime _lastActivityAt = DateTime.now();
   DateTime? _warningDeadline;
@@ -117,9 +161,29 @@ class PlayerSessionService extends ChangeNotifier {
     final deadline = _matchWarningDeadline;
     if (deadline == null) return null;
     final left = deadline.difference(DateTime.now()).inSeconds;
-    final maxSec =
-        AppIdleConfigService.instance.config.matchWarningCountdownSeconds;
+    final maxSec = _currentMatchAfkTempo().warningCountdownSeconds;
     return left.clamp(0, maxSec);
+  }
+
+  /// HUD / overlay: şu an geçerli saniyelik kütle erimesi.
+  int get effectiveMatchMassDrainPerSecond =>
+      _currentMatchAfkTempo().massDrainPerSecond;
+
+  MatchAfkTempo _currentMatchAfkTempo() {
+    final hooks = _matchHooks;
+    final config = AppIdleConfigService.instance.config;
+    if (hooks == null) {
+      return MatchAfkTempo.resolve(
+        config: config,
+        roomType: RoomType.normal,
+        mass: 0,
+      );
+    }
+    return MatchAfkTempo.resolve(
+      config: config,
+      roomType: hooks.roomType,
+      mass: hooks.massProvider(),
+    );
   }
 
   /// Sonuç ekranı: lobiye dönüş geri sayımı.
@@ -173,23 +237,11 @@ class PlayerSessionService extends ChangeNotifier {
     _matchResultExitDeadline = null;
   }
 
-  /// Yönetici paneli açıkken AFK'yi durdurur; kapanınca yeniden başlar.
+  /// Yönetici paneli açıkken AFK'yi durdurur; admin hesaplarında her zaman kapalı.
   void setIdleSuppressed(bool suppressed) {
     if (_idleSuppressed == suppressed) return;
     _idleSuppressed = suppressed;
-    if (suppressed) {
-      _stopIdleWatch();
-      _clearWarning(notify: false);
-      _clearMatchAfk(notify: false);
-      _clearMatchResultExit(notify: false);
-      notifyListeners();
-      return;
-    }
-    if (_claimed) {
-      _forceNoteActivity();
-      _startIdleWatch();
-      notifyListeners();
-    }
+    _syncIdleExemption();
   }
 
   /// Rewarded reklam gibi kısa akışlarda maç idle sayacını durdurur.
@@ -208,7 +260,8 @@ class PlayerSessionService extends ChangeNotifier {
   }
 
   void _applyIdleWatchForCurrentUser() {
-    if (_idleSuppressed) {
+    _ensureAdminListener();
+    if (_idleExempt) {
       _stopIdleWatch();
       _clearWarning(notify: false);
       _clearMatchAfk(notify: false);
@@ -262,6 +315,7 @@ class PlayerSessionService extends ChangeNotifier {
 
   /// Uygulama girişi sonrası oturumu açar (lobi / admin / maç ortak).
   Future<void> ensureAppSession() async {
+    _ensureAdminListener();
     if (_starting) return;
     if (!AuthService.instance.isSignedIn) return;
 
@@ -376,7 +430,7 @@ class PlayerSessionService extends ChangeNotifier {
 
   /// Kullanıcı etkileşimi — boşta kalma süresini sıfırlar.
   void noteActivity() {
-    if (!_claimed || _idleSuppressed) return;
+    if (!_claimed || _idleExempt) return;
 
     final hadWarning = _warningDeadline != null ||
         _matchAfkActive ||
@@ -404,7 +458,7 @@ class PlayerSessionService extends ChangeNotifier {
   }
 
   void _startIdleWatch() {
-    if (_idleSuppressed) {
+    if (_idleExempt) {
       _stopIdleWatch();
       _clearWarning(notify: false);
       _clearMatchAfk(notify: false);
@@ -421,7 +475,7 @@ class PlayerSessionService extends ChangeNotifier {
   }
 
   void _onIdleTick() {
-    if (!_claimed || _expiring || _idleSuppressed) return;
+    if (!_claimed || _expiring || _idleExempt) return;
 
     final config = AppIdleConfigService.instance.config;
     final now = DateTime.now();
@@ -430,7 +484,8 @@ class PlayerSessionService extends ChangeNotifier {
     if (_inMatch) {
       if (_matchHooks == null) return;
       if (_matchIdlePauseDepth > 0) return;
-      _onMatchIdleTick(now, config.matchIdleBeforeWarning);
+      final tempo = _currentMatchAfkTempo();
+      _onMatchIdleTick(now, tempo);
       return;
     }
 
@@ -451,7 +506,7 @@ class PlayerSessionService extends ChangeNotifier {
     }
   }
 
-  void _onMatchIdleTick(DateTime now, Duration idleBeforeWarning) {
+  void _onMatchIdleTick(DateTime now, MatchAfkTempo tempo) {
     final hooks = _matchHooks;
     if (hooks == null) return;
 
@@ -460,7 +515,7 @@ class PlayerSessionService extends ChangeNotifier {
       if (_matchAfkActive || _matchDrainActive) {
         _clearMatchAfk(notify: false);
       }
-      _onMatchResultIdleTick(now, idleBeforeWarning);
+      _onMatchResultIdleTick(now, tempo.idleBeforeWarning);
       return;
     }
 
@@ -470,14 +525,12 @@ class PlayerSessionService extends ChangeNotifier {
 
     if (!_matchAfkActive) {
       final idleFor = now.difference(_lastActivityAt);
-      if (idleFor < idleBeforeWarning) return;
-      // 10 sn idle → kısa geri sayımlı uyarı, sonra kütle erimesi.
+      if (idleFor < tempo.idleBeforeWarning) return;
+      // Idle → kısa geri sayımlı uyarı, sonra kütle erimesi.
       _matchAfkActive = true;
       _matchDrainActive = false;
       _matchDrainAccumulator = 0;
-      _matchWarningDeadline = now.add(
-        AppIdleConfigService.instance.config.matchWarningCountdown,
-      );
+      _matchWarningDeadline = now.add(tempo.warningCountdown);
       notifyListeners();
       return;
     }
@@ -497,9 +550,10 @@ class PlayerSessionService extends ChangeNotifier {
       notifyListeners();
     }
 
-    final config = AppIdleConfigService.instance.config;
+    // Drain rate can tighten/soften as size crosses late-game band.
+    final liveTempo = _currentMatchAfkTempo();
     final mass = hooks.massProvider();
-    final threshold = config.matchKickMassThreshold.toDouble();
+    final threshold = liveTempo.kickMassThreshold.toDouble();
 
     // Uyarı bitti; kütle zaten eşikteyse hemen yutulmuş say.
     if (mass <= threshold) {
@@ -507,7 +561,7 @@ class PlayerSessionService extends ChangeNotifier {
       return;
     }
 
-    final drain = config.matchMassDrainPerSecond.toDouble();
+    final drain = liveTempo.massDrainPerSecond.toDouble();
     _matchDrainAccumulator += drain;
     final steps = _matchDrainAccumulator.floor();
     if (steps > 0) {
@@ -571,7 +625,7 @@ class PlayerSessionService extends ChangeNotifier {
 
   /// Sonuç ekranı idle: oturumu kapatmadan lobiye dön.
   Future<void> _leaveDueToResultIdle() async {
-    if (_expiring || _idleSuppressed) return;
+    if (_expiring || _idleExempt) return;
     _expiring = true;
     _clearMatchResultExit(notify: true);
 
@@ -590,7 +644,7 @@ class PlayerSessionService extends ChangeNotifier {
   }
 
   Future<void> _expireDueToMatchAfk() async {
-    if (_expiring || _idleSuppressed) return;
+    if (_expiring || _idleExempt) return;
     _expiring = true;
     _clearMatchAfk(notify: true);
     _clearMatchResultExit(notify: false);
@@ -616,7 +670,7 @@ class PlayerSessionService extends ChangeNotifier {
   }
 
   Future<void> _expireDueToIdle() async {
-    if (_expiring || _idleSuppressed) return;
+    if (_expiring || _idleExempt) return;
     _expiring = true;
     _clearWarning(notify: true);
     _clearMatchAfk(notify: false);

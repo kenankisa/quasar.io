@@ -1,3 +1,4 @@
 #include "Generated.xcconfig"
-// Production: set real AdMob App ID (not the Google test ID).
+// Production: run `powershell -File tools/sync_admob_ios.ps1` after filling
+// dart_defines.prod.json (do not leave the Google test App ID below for store).
 ADMOB_APP_ID=ca-app-pub-3940256099942544~1458002511

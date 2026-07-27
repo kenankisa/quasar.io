@@ -5,6 +5,7 @@ class AppRankConfig {
     required this.winPointsNormal,
     required this.winPointsElite,
     required this.winPointsUnique,
+    required this.winPointsHardcore,
     required this.minPointsStellar,
     required this.minPointsNova,
     required this.minPointsQuasar,
@@ -16,6 +17,7 @@ class AppRankConfig {
   final int winPointsNormal;
   final int winPointsElite;
   final int winPointsUnique;
+  final int winPointsHardcore;
 
   /// Nebula her zaman 0. Diğer basamaklar için minimum puan.
   final int minPointsStellar;
@@ -28,6 +30,7 @@ class AppRankConfig {
     winPointsNormal: 1,
     winPointsElite: 2,
     winPointsUnique: 3,
+    winPointsHardcore: 4,
     minPointsStellar: 8,
     minPointsNova: 25,
     minPointsQuasar: 75,
@@ -39,6 +42,7 @@ class AppRankConfig {
       'simple' => winPointsSimple,
       'elite' => winPointsElite,
       'unique' => winPointsUnique,
+      'hardcore' => winPointsHardcore,
       _ => winPointsNormal,
     };
   }
@@ -67,6 +71,7 @@ class AppRankConfig {
     int? winPointsNormal,
     int? winPointsElite,
     int? winPointsUnique,
+    int? winPointsHardcore,
     int? minPointsStellar,
     int? minPointsNova,
     int? minPointsQuasar,
@@ -77,6 +82,7 @@ class AppRankConfig {
       winPointsNormal: winPointsNormal ?? this.winPointsNormal,
       winPointsElite: winPointsElite ?? this.winPointsElite,
       winPointsUnique: winPointsUnique ?? this.winPointsUnique,
+      winPointsHardcore: winPointsHardcore ?? this.winPointsHardcore,
       minPointsStellar: minPointsStellar ?? this.minPointsStellar,
       minPointsNova: minPointsNova ?? this.minPointsNova,
       minPointsQuasar: minPointsQuasar ?? this.minPointsQuasar,
@@ -91,6 +97,7 @@ class AppRankConfig {
         'winPointsNormal': winPointsNormal,
         'winPointsElite': winPointsElite,
         'winPointsUnique': winPointsUnique,
+        'winPointsHardcore': winPointsHardcore,
         'minPointsStellar': minPointsStellar,
         'minPointsNova': minPointsNova,
         'minPointsQuasar': minPointsQuasar,
@@ -141,6 +148,11 @@ class AppRankConfig {
         defaults.winPointsUnique,
         max: 50,
       ),
+      winPointsHardcore: readInt(
+        'winPointsHardcore',
+        defaults.winPointsHardcore,
+        max: 50,
+      ),
       minPointsStellar: stellar,
       minPointsNova: nova,
       minPointsQuasar: quasar,
@@ -153,6 +165,7 @@ class AppRankConfig {
         winPointsNormal == other.winPointsNormal &&
         winPointsElite == other.winPointsElite &&
         winPointsUnique == other.winPointsUnique &&
+        winPointsHardcore == other.winPointsHardcore &&
         minPointsStellar == other.minPointsStellar &&
         minPointsNova == other.minPointsNova &&
         minPointsQuasar == other.minPointsQuasar &&

@@ -108,8 +108,26 @@ const playerRankTiers = <PlayerRankTier>[
   ),
 ];
 
+/// Highest tier (Singularity).
+PlayerRankTier get topPlayerRankTier => playerRankTiers.first;
+
+/// Reserved display name — only admin accounts may claim it (server-enforced).
+bool isReservedAdminUsername(String? name) {
+  final n = name?.trim().toLowerCase();
+  return n == 'admin';
+}
+
 /// Resolves rank from cumulative win points (admin thresholds).
-PlayerRankTier playerRankForPoints(int points) {
+///
+/// [forceTopTier] / reserved username "Admin" → always Singularity (highest).
+PlayerRankTier playerRankForPoints(
+  int points, {
+  String? username,
+  bool forceTopTier = false,
+}) {
+  if (forceTopTier || isReservedAdminUsername(username)) {
+    return topPlayerRankTier;
+  }
   final clamped = points.clamp(0, 1 << 30);
   final cfg = AppRankConfigService.instance.config;
   for (final tier in playerRankTiers) {

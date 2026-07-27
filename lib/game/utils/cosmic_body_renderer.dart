@@ -21,7 +21,7 @@ abstract final class CosmicBodyRenderer {
     int vertexCount = 8,
     double irregularity = 0.24,
   }) {
-    if (CanvasEffects.mobileLiteMode) {
+    if (CanvasEffects.economyMode) {
       _drawRockyBodyLite(
         canvas,
         r,
@@ -124,7 +124,7 @@ abstract final class CosmicBodyRenderer {
     Color core,
     int seed,
   ) {
-    if (CanvasEffects.mobileLiteMode) {
+    if (CanvasEffects.economyMode) {
       final path = _smoothIrregularPath(r, seed, 7, 0.16);
       _drawRockyBodyLite(canvas, r, base, seed, vertexCount: 7, irregularity: 0.16);
       canvas.drawPath(
@@ -205,7 +205,7 @@ abstract final class CosmicBodyRenderer {
     double spin,
     void Function(Canvas canvas, double r) drawSurface,
   ) {
-    if (CanvasEffects.mobileLiteMode) {
+    if (CanvasEffects.economyMode) {
       _drawLitSphereLite(canvas, r, base, atmosphere: atmosphere);
       return;
     }
@@ -263,7 +263,7 @@ abstract final class CosmicBodyRenderer {
     Color cyan,
     Color magenta,
   ) {
-    if (CanvasEffects.mobileLiteMode) {
+    if (CanvasEffects.economyMode) {
       canvas.drawCircle(
         Offset.zero,
         r * 1.5,

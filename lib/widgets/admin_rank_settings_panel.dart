@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../game/models/app_rank_config.dart';
 import '../services/app_rank_config_service.dart';
-import '../services/lang_service.dart';
 import '../utils/player_rank.dart';
 import 'bot_name_badge.dart';
 
@@ -20,7 +20,7 @@ class AdminRankSettingsPanel extends StatelessWidget {
         final service = AppRankConfigService.instance;
         final config = service.config;
         final defaults = AppRankConfig.defaults;
-        final lang = LanguageService.instance;
+        final lang = context.lang;
         final saving = service.saving;
         final dirty = service.hasUnsavedChanges;
 
@@ -91,6 +91,18 @@ class AdminRankSettingsPanel extends StatelessWidget {
               enabled: !saving,
               onChanged: (v) => service.updateConfig(
                 (c) => c.copyWith(winPointsUnique: v.round()),
+              ),
+            ),
+            _RankSlider(
+              label: lang.t('admin_rank_points_hardcore'),
+              value: config.winPointsHardcore.toDouble(),
+              min: 0,
+              max: 25,
+              display: '${config.winPointsHardcore}',
+              defaultLabel: '${defaults.winPointsHardcore}',
+              enabled: !saving,
+              onChanged: (v) => service.updateConfig(
+                (c) => c.copyWith(winPointsHardcore: v.round()),
               ),
             ),
             const SizedBox(height: 18),
@@ -225,7 +237,7 @@ class _RankPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(

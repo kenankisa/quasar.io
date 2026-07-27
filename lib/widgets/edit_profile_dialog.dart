@@ -1,14 +1,14 @@
 import 'dart:io' show File;
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../services/lang_service.dart';
+import '../utils/lang_rebuild.dart';
+import '../utils/lang_scope.dart';
 import '../services/profile_service.dart';
 import '../utils/player_name.dart';
-import 'profile_avatar.dart';
+import 'profile/profile_cosmic_ui.dart';
 
 class EditProfileDialog extends StatefulWidget {
   const EditProfileDialog({super.key, required this.profile});
@@ -20,10 +20,10 @@ class EditProfileDialog extends StatefulWidget {
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Edit Profile',
-      barrierColor: Colors.black54,
+      barrierColor: Colors.black.withValues(alpha: 0.62),
       transitionDuration: const Duration(milliseconds: 250),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return EditProfileDialog(profile: profile);
+        return LangRebuild(child: EditProfileDialog(profile: profile));
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curve = CurvedAnimation(
@@ -82,7 +82,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   }
 
   Future<void> _save() async {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final name = _nameController.text.trim();
     if (!ProfileService.isValidUsername(name)) {
       setState(() => _errorMessage = lang.t('profile_username_invalid'));
@@ -113,6 +113,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         _saving = false;
         _errorMessage = switch (e.error) {
           ProfileUpdateError.usernameTaken => lang.t('profile_username_taken'),
+          ProfileUpdateError.usernameReserved =>
+            lang.t('profile_username_reserved'),
           ProfileUpdateError.invalidUsername =>
             lang.t('profile_username_invalid'),
           ProfileUpdateError.notAuthenticated => lang.t('profile_update_error'),
@@ -131,204 +133,157 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
-    final size = MediaQuery.sizeOf(context);
+    final lang = context.lang;
 
-    return Center(
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: size.width * 0.88,
-          constraints: const BoxConstraints(maxWidth: 400),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF12122A).withValues(alpha: 0.97),
-                const Color(0xFF0A0A1A).withValues(alpha: 0.99),
-              ],
+    return ProfileCosmicDialogFrame(
+      widthFactor: 0.88,
+      maxWidth: 400,
+      maxHeight: 520,
+      intrinsicHeight: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ProfileCosmicHeader(
+              title: lang.t('profile_edit'),
+              closeEnabled: !_saving,
+              onClose: () => Navigator.of(context).pop(false),
             ),
-            border: Border.all(
-              color: const Color(0xFF00F0FF).withValues(alpha: 0.35),
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+            const SizedBox(height: 12),
+            Center(
+              child: GestureDetector(
+                onTap: _saving ? null : _pickAvatar,
+                child: Stack(
+                  alignment: Alignment.center,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            lang.t('profile_edit'),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                    _buildAvatarPreview(),
+                    if (!_saving)
+                      Positioned(
+                        bottom: 4,
+                        right: 4,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF00F0FF),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF060818),
+                              width: 2,
                             ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white54),
-                          onPressed: _saving
-                              ? null
-                              : () => Navigator.of(context).pop(false),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: GestureDetector(
-                        onTap: _saving ? null : _pickAvatar,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            _buildAvatarPreview(),
-                            if (!_saving)
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF00F0FF),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: const Color(0xFF0A0A1A),
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: const Icon(
-                                    Icons.camera_alt,
-                                    size: 18,
-                                    color: Color(0xFF0A0A1A),
-                                  ),
-                                ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF00F0FF)
+                                    .withValues(alpha: 0.45),
+                                blurRadius: 8,
                               ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Center(
-                      child: Text(
-                        lang.t('profile_edit_avatar'),
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.55),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      lang.t('profile_edit_name'),
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _nameController,
-                      enabled: !_saving,
-                      maxLength: maxPlayerNameLength,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        counterStyle: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.4),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.06),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: const Color(0xFF00F0FF).withValues(alpha: 0.3),
+                            ],
                           ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: const Color(0xFF00F0FF).withValues(alpha: 0.25),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF00F0FF),
+                          child: const Icon(
+                            Icons.camera_alt_rounded,
+                            size: 18,
+                            color: Color(0xFF060818),
                           ),
                         ),
                       ),
-                      onChanged: (_) {
-                        if (_errorMessage != null) {
-                          setState(() => _errorMessage = null);
-                        }
-                      },
-                    ),
-                    if (_errorMessage != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(
-                          color: Color(0xFFFF6688),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _saving
-                                ? null
-                                : () => Navigator.of(context).pop(false),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white70,
-                              side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.25),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            child: Text(lang.t('profile_edit_cancel')),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: _saving ? null : _save,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF00F0FF),
-                              foregroundColor: const Color(0xFF0A0A1A),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            child: _saving
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Color(0xFF0A0A1A),
-                                    ),
-                                  )
-                                : Text(lang.t('profile_edit_save')),
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
             ),
-          ),
+            const SizedBox(height: 6),
+            Center(
+              child: Text(
+                lang.t('profile_edit_avatar'),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              lang.t('profile_edit_name'),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.65),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ProfileCosmicTextField(
+              controller: _nameController,
+              enabled: !_saving,
+              maxLength: maxPlayerNameLength,
+              onChanged: (_) {
+                if (_errorMessage != null) {
+                  setState(() => _errorMessage = null);
+                }
+              },
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                style: const TextStyle(
+                  color: Color(0xFFFF6688),
+                  fontSize: 13,
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: BorderSide(
+                        color: const Color(0xFF00F0FF).withValues(alpha: 0.28),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(lang.t('profile_edit_cancel')),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _saving ? null : _save,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF00F0FF),
+                      foregroundColor: const Color(0xFF060818),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                      shadowColor: const Color(0xFF00F0FF).withValues(alpha: 0.4),
+                    ),
+                    child: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFF060818),
+                            ),
+                          )
+                        : Text(
+                            lang.t('profile_edit_save'),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -336,32 +291,40 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
 
   Widget _buildAvatarPreview() {
     if (_pickedFile != null) {
-      return ClipOval(
-        child: SizedBox(
-          width: 104,
-          height: 104,
-          child: kIsWeb
-              ? Image.network(
-                  _pickedFile!.path,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => _networkOrDefaultAvatar(),
-                )
-              : Image.file(
-                  File(_pickedFile!.path),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => _networkOrDefaultAvatar(),
-                ),
+      return Container(
+        padding: const EdgeInsets.all(3),
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [Color(0xFF00F0FF), Color(0xFFFF2D95)],
+          ),
+        ),
+        child: ClipOval(
+          child: SizedBox(
+            width: 104,
+            height: 104,
+            child: kIsWeb
+                ? Image.network(
+                    _pickedFile!.path,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => _networkOrDefaultAvatar(),
+                  )
+                : Image.file(
+                    File(_pickedFile!.path),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => _networkOrDefaultAvatar(),
+                  ),
+          ),
         ),
       );
     }
-    return _networkOrDefaultAvatar();
+    return ProfileOrbitAvatar(
+      avatarUrl: _previewAvatarUrl,
+      editIcon: Icons.camera_alt_rounded,
+    );
   }
 
   Widget _networkOrDefaultAvatar() {
-    return ProfileAvatar(
-      avatarUrl: _previewAvatarUrl,
-      radius: 52,
-      iconSize: 48,
-    );
+    return ProfileOrbitAvatar(avatarUrl: _previewAvatarUrl);
   }
 }

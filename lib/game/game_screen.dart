@@ -12,7 +12,8 @@ import '../game/models/room_leaderboard.dart';
 import '../services/analytics_play_tracker.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
-import '../services/lang_service.dart';
+import '../utils/lang_rebuild.dart';
+import '../utils/lang_scope.dart';
 import '../services/player_session_service.dart';
 import '../utils/app_lifecycle.dart';
 import '../utils/display_frame_rate.dart';
@@ -49,7 +50,8 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
+class _GameScreenState extends State<GameScreen>
+    with WidgetsBindingObserver, LangChangeListener {
   OrbitGame? _game;
   bool _matchResultSaved = false;
   bool _isLeaving = false;
@@ -58,6 +60,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   bool _quitConfirmPausedGame = false;
   Completer<bool>? _quitConfirmCompleter;
   int _gamesWonAtStart = 0;
+
+  @override
+  void onLangChanged() => setState(() {});
 
   @override
   void initState() {
@@ -109,6 +114,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     unawaited(DisplayFrameRate.applyGameplayCap());
     PlayerSessionService.instance.attachMatchIdleHooks(
       MatchIdleHooks(
+        roomType: widget.roomType,
         massProvider: () => game.player.radius,
         onMassDrain: (amount) {
           if (game.player.isEliminated) return;
@@ -667,7 +673,7 @@ class _MatchQuitConfirmOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
 
     return Material(
       color: Colors.black.withValues(alpha: 0.72),

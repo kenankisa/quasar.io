@@ -19,11 +19,11 @@ create table if not exists public.profiles (
   updated_at timestamptz,
   username text,
   avatar_url text,
-  diamonds int not null default 20,
+  diamonds int not null default 25,
   games_won int not null default 0,
   active_skin text not null default 'default',
   -- Skill tree (also applied via migration_skill_tree.sql on existing DBs)
-  peak_diamonds int not null default 20,
+  peak_diamonds int not null default 25,
   skill_tree jsonb not null default '{}'::jsonb
 );
 

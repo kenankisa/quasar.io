@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -22,6 +23,7 @@ class LobbyRoomStatsService extends ChangeNotifier {
     RoomType.normal: const RoomLobbyStats.empty(),
     RoomType.elite: const RoomLobbyStats.empty(),
     RoomType.unique: const RoomLobbyStats.empty(),
+    RoomType.hardcore: const RoomLobbyStats.empty(),
   };
 
   RealtimeChannel? _channel;
@@ -29,6 +31,12 @@ class LobbyRoomStatsService extends ChangeNotifier {
   Timer? _pollTimer;
   int _refCount = 0;
   bool _refreshInFlight = false;
+
+  /// Hardcore seat count must match on consecutive RPC reads before UI updates
+  /// (avoids flicker between `real_player_count` aggregate and seat occupancy).
+  int? _hardcoreSeatsCandidate;
+  int _hardcoreSeatsCandidateHits = 0;
+  static const _hardcoreSeatsStablePolls = 2;
 
   RoomLobbyStats statsFor(RoomType type) =>
       _stats[type] ?? const RoomLobbyStats.empty();
@@ -142,7 +150,8 @@ class LobbyRoomStatsService extends ChangeNotifier {
 
       final aggregates = <RoomType, _RoomAggregate>{
         for (final type in RoomType.values)
-          if (type != RoomType.simple) type: _RoomAggregate(),
+          if (type != RoomType.simple && type != RoomType.hardcore)
+            type: _RoomAggregate(),
       };
 
       final staleBefore = DateTime.now().toUtc().subtract(_staleAfter);
@@ -161,7 +170,8 @@ class LobbyRoomStatsService extends ChangeNotifier {
         final players = (row['real_player_count'] as num?)?.toInt() ?? 0;
         aggregate.universes++;
         aggregate.players += players;
-        aggregate.bots += RoomMatchmaking.botCountFor(players);
+        aggregate.bots +=
+            RoomMatchmaking.botCountFor(players, roomType: roomType);
       }
 
       var changed = false;
@@ -178,10 +188,62 @@ class LobbyRoomStatsService extends ChangeNotifier {
       }
 
       if (changed) notifyListeners();
+
+      await _refreshHardcoreLobbyStatus();
     } catch (e, stackTrace) {
       debugPrint('LobbyRoomStatsService refresh failed: $e\n$stackTrace');
     } finally {
       _refreshInFlight = false;
+    }
+  }
+
+  Future<void> _refreshHardcoreLobbyStatus() async {
+    try {
+      final response =
+          await AuthService.instance.client.rpc('get_hardcore_lobby_status');
+      if (response == null) return;
+      final map = Map<String, dynamic>.from(response as Map);
+      final seats = (map['seat_occupancy'] as num?)?.toInt() ?? 0;
+      final maxSeats = (map['max_players'] as num?)?.toInt() ?? 20;
+      final queue = (map['queue_count'] as num?)?.toInt() ?? 0;
+
+      final prev = _stats[RoomType.hardcore] ?? const RoomLobbyStats.empty();
+      final isInitial = prev.hardcoreSeatOccupancy == null;
+
+      if (seats == _hardcoreSeatsCandidate) {
+        _hardcoreSeatsCandidateHits++;
+      } else {
+        _hardcoreSeatsCandidate = seats;
+        _hardcoreSeatsCandidateHits = 1;
+      }
+
+      final seatsStable =
+          isInitial || _hardcoreSeatsCandidateHits >= _hardcoreSeatsStablePolls;
+      final metaChanged = prev.hardcoreMaxSeats != maxSeats ||
+          prev.hardcoreQueueCount != queue;
+
+      if (!seatsStable && !metaChanged) return;
+
+      final displaySeats = seatsStable
+          ? seats
+          : (prev.hardcoreSeatOccupancy ?? seats);
+
+      final next = RoomLobbyStats(
+        activeUniverses: math.max(1, prev.activeUniverses),
+        players: displaySeats,
+        bots: 0,
+        hardcoreSeatOccupancy: displaySeats,
+        hardcoreMaxSeats: maxSeats,
+        hardcoreQueueCount: queue,
+      );
+      if (_stats[RoomType.hardcore] != next) {
+        _stats[RoomType.hardcore] = next;
+        notifyListeners();
+      }
+    } catch (e, stackTrace) {
+      debugPrint(
+        'LobbyRoomStatsService hardcore status failed: $e\n$stackTrace',
+      );
     }
   }
 
@@ -191,8 +253,13 @@ class LobbyRoomStatsService extends ChangeNotifier {
     final players = (row['real_player_count'] as num?)?.toInt() ?? 0;
     if (players <= 0) return false;
 
+    final roomType = _parseRoomType(row['room_type'] as String?);
     final leaderRadius = (row['leader_radius'] as num?)?.toInt() ?? 0;
-    if (leaderRadius >= RoomMatchmaking.leaderRadiusJoinThreshold) {
+    // Hardcore always-open: softcap (~450) must never hide the universe.
+    if (RoomMatchmaking.appliesLeaderJoinLock(
+          roomType ?? RoomType.normal,
+        ) &&
+        leaderRadius >= RoomMatchmaking.leaderRadiusJoinThreshold) {
       return false;
     }
 

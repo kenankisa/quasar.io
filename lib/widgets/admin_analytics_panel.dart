@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../game/models/admin_analytics.dart';
 import '../game/room_type.dart';
 import '../services/admin_analytics_service.dart';
-import '../services/lang_service.dart';
 
 /// Yönetim paneli — geçmiş istatistikler bölümü.
 class AdminAnalyticsPanel extends StatelessWidget {
@@ -17,7 +17,7 @@ class AdminAnalyticsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final service = AdminAnalyticsService.instance;
 
     return ListenableBuilder(
@@ -133,7 +133,7 @@ class _WindowChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -171,7 +171,7 @@ class _OverviewGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final tiles = [
       _MiniStat(
         label: lang.t('admin_analytics_unique_logins'),
@@ -258,7 +258,7 @@ class _PlayTimeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     return _PanelCard(
       accent: const Color(0xFF00F0FF),
       child: Column(
@@ -298,7 +298,7 @@ class _DiamondsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     return _PanelCard(
       accent: const Color(0xFFFFC857),
       child: Column(
@@ -350,7 +350,7 @@ class _UniverseAnalyticsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final accent = _accentFor(analytics.roomType);
     final title = lang.t(_titleKey(analytics.roomType));
 
@@ -433,6 +433,7 @@ class _UniverseAnalyticsCard extends StatelessWidget {
         RoomType.normal => const Color(0xFF00F0FF),
         RoomType.elite => const Color(0xFFFF00AA),
         RoomType.unique => const Color(0xFFFFC857),
+        RoomType.hardcore => const Color(0xFFFF3355),
       };
 
   static String _titleKey(RoomType type) => switch (type) {
@@ -440,6 +441,7 @@ class _UniverseAnalyticsCard extends StatelessWidget {
         RoomType.normal => 'room_normal_title',
         RoomType.elite => 'room_elite_title',
         RoomType.unique => 'room_unique_title',
+        RoomType.hardcore => 'room_hardcore_title',
       };
 }
 

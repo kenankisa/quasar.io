@@ -223,13 +223,49 @@ class StarfieldBackground extends Component with HasGameReference<OrbitGame> {
               hotBias: 0.5,
             ),
           ],
+        RoomType.hardcore => [
+            _StarLayer(
+              count: 2450,
+              minRadius: 0.28,
+              maxRadius: 0.78,
+              minAlpha: 0.16,
+              maxAlpha: 0.52,
+              seed: 3,
+            ),
+            _StarLayer(
+              count: 1600,
+              minRadius: 0.4,
+              maxRadius: 1.2,
+              minAlpha: 0.22,
+              maxAlpha: 0.62,
+              seed: 7,
+            ),
+            _StarLayer(
+              count: 620,
+              minRadius: 0.75,
+              maxRadius: 1.85,
+              minAlpha: 0.3,
+              maxAlpha: 0.74,
+              seed: 11,
+              hotBias: 0.35,
+            ),
+            _StarLayer(
+              count: 200,
+              minRadius: 1.0,
+              maxRadius: 2.4,
+              minAlpha: 0.42,
+              maxAlpha: 0.88,
+              seed: 47,
+              hotBias: 0.55,
+            ),
+          ],
       };
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
     _spec = _SpaceSpec.forRoom(roomType);
-    _useTileBake = CanvasEffects.mobileLiteMode;
+    _useTileBake = CanvasEffects.economyMode;
     _layers = _layersFor(roomType);
     final worldSize = game.worldSize;
 
@@ -390,7 +426,7 @@ class StarfieldBackground extends Component with HasGameReference<OrbitGame> {
 
   List<_NebulaComplex> _buildNebulae(double worldSize) {
     final rng = math.Random(83);
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final count = lite
         ? (_spec.nebulaCount * 0.62).round().clamp(3, _spec.nebulaCount)
         : _spec.nebulaCount;
@@ -403,6 +439,7 @@ class StarfieldBackground extends Component with HasGameReference<OrbitGame> {
         RoomType.normal => 1050 + rng.nextDouble() * 750,
         RoomType.elite => 950 + rng.nextDouble() * 800,
         RoomType.unique => 1150 + rng.nextDouble() * 900,
+        RoomType.hardcore => 1100 + rng.nextDouble() * 850,
       };
 
       // Even spacing along X + jitter → every screenful holds some nebula.
@@ -497,7 +534,7 @@ class StarfieldBackground extends Component with HasGameReference<OrbitGame> {
 
   List<_Galaxy> _buildGalaxies(double worldSize) {
     final rng = math.Random(157);
-    final count = CanvasEffects.mobileLiteMode
+    final count = CanvasEffects.economyMode
         ? (_spec.galaxyCount * 0.6).round().clamp(1, _spec.galaxyCount)
         : _spec.galaxyCount;
 
@@ -587,7 +624,7 @@ class StarfieldBackground extends Component with HasGameReference<OrbitGame> {
   List<_BandPatch> _buildBandPatches(double worldSize) {
     if (_spec.bandStrength <= 0) return const [];
     final rng = math.Random(211);
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final patchCount = lite ? 9 : 14;
     final halfLen = worldSize * 0.72;
     final dir = Offset(math.cos(_bandAngle), math.sin(_bandAngle));
@@ -655,7 +692,7 @@ class StarfieldBackground extends Component with HasGameReference<OrbitGame> {
   List<_BandStar> _buildBandStars(double worldSize) {
     if (_spec.bandStarCount <= 0) return const [];
     final rng = math.Random(223);
-    final count = CanvasEffects.mobileLiteMode
+    final count = CanvasEffects.economyMode
         ? (_spec.bandStarCount * 0.5).round()
         : _spec.bandStarCount;
     final halfLen = worldSize * 0.72;
@@ -907,7 +944,7 @@ class StarfieldBackground extends Component with HasGameReference<OrbitGame> {
   /// While the local player is locked in a merger on a lite-budget GPU
   /// (web / phone), skip decorative extras — the merger VFX own the frame.
   bool get _mergerBudgetCrunch =>
-      CanvasEffects.mobileLiteMode &&
+      CanvasEffects.economyMode &&
       game.isReady &&
       game.gravityPhysics.isMergerActive;
 
@@ -1074,7 +1111,7 @@ class StarfieldBackground extends Component with HasGameReference<OrbitGame> {
         : 0.0;
     final zoomedOut = game.camera.viewfinder.zoom < 0.32;
     final lensHighDetail = lensingActive && !zoomedOut;
-    final skipSparkle = zoomedOut || CanvasEffects.mobileLiteMode;
+    final skipSparkle = zoomedOut || CanvasEffects.economyMode;
     final sparkleEnabled =
         roomType == RoomType.elite || roomType == RoomType.unique;
 
@@ -1179,7 +1216,7 @@ class StarfieldBackground extends Component with HasGameReference<OrbitGame> {
     canvas.drawCircle(center, radius, paint);
 
     if (_useBlur &&
-        radius > (CanvasEffects.mobileLiteMode ? 1.9 : 1.35) &&
+        radius > (CanvasEffects.economyMode ? 1.9 : 1.35) &&
         twinkle > 0.45) {
       final glowMul = radius > 2.0 ? 2.4 : 1.8;
       canvas.drawCircle(
@@ -1359,7 +1396,7 @@ class StarfieldBackground extends Component with HasGameReference<OrbitGame> {
   void _drawComets(Canvas canvas, Rect visible) {
     if (_comets.isEmpty) return;
     final expanded = visible.inflate(450);
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
 
     for (final comet in _comets) {
       final head = Offset(comet.position.x, comet.position.y);

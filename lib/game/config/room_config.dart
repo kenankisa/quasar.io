@@ -92,6 +92,16 @@ class RoomConfig {
             gravityMultiplier: standardGravityMultiplier,
             foodGrowthMultiplier: 0.75,
           ),
+        RoomType.hardcore => const RoomConfig(
+            worldSize: 9000,
+            asteroidCount: 0,
+            meteoriteCount: 120,
+            planetCount: 140,
+            quasarFragmentCount: 0,
+            mineCount: 4,
+            gravityMultiplier: standardGravityMultiplier,
+            foodGrowthMultiplier: 0.72,
+          ),
       };
 
   static void applyOverrides(Map<RoomType, RoomConfig> values) {

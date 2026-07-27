@@ -7,6 +7,8 @@ class FirstMatchTuning {
   const FirstMatchTuning._();
 
   static const hintDurationSeconds = 30.0;
+  /// Interactive step tutorial (move → absorb → boost) auto-hides after this.
+  static const tutorialDurationSeconds = 60.0;
   static const starterClusterCount = 5;
 
   static bool isFirstMatch({

@@ -64,7 +64,7 @@ int swallowEntityKey(Vector2 pos, double radius) =>
 abstract final class HoleSwallowVisual {
   HoleSwallowVisual._();
 
-  static int maxBridgeBudget() => CanvasEffects.mobileLiteMode ? 1 : 2;
+  static int maxBridgeBudget() => CanvasEffects.economyMode ? 1 : 2;
 
   /// Build ranked swallow pairs — local player always wins a slot when close.
   static List<SwallowPair> rankPairs(

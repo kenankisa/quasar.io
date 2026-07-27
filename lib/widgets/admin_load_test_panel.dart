@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 import 'package:flutter/services.dart';
 
 import '../game/game_screen.dart';
@@ -10,6 +11,7 @@ import '../services/analytics_play_tracker.dart';
 import '../services/lang_service.dart';
 import '../services/player_session_service.dart';
 import '../services/room_matchmaking_service.dart';
+import 'admin/admin_tools_role_legend.dart';
 
 /// Yönetim paneli — eşzamanlı oyuncu yük testi.
 class AdminLoadTestPanel extends StatefulWidget {
@@ -92,7 +94,7 @@ class _AdminLoadTestPanelState extends State<AdminLoadTestPanel> {
       roomTypes: _selectedRooms,
     );
     if (!mounted) return;
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     if (result != null) {
       unawaited(AdminStatsService.instance.refresh());
       ScaffoldMessenger.of(context).showSnackBar(
@@ -143,7 +145,7 @@ class _AdminLoadTestPanelState extends State<AdminLoadTestPanel> {
   Future<void> _joinSimRoom(AdminLoadTestJoinTarget target) async {
     if (_joining) return;
     setState(() => _joining = true);
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     try {
       await PlayerSessionService.instance.setInGame(target.roomType);
       await AnalyticsPlayTracker.instance.begin(target.roomType);
@@ -188,7 +190,7 @@ class _AdminLoadTestPanelState extends State<AdminLoadTestPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
 
     return ListenableBuilder(
       listenable: Listenable.merge([_service, lang]),
@@ -200,6 +202,11 @@ class _AdminLoadTestPanelState extends State<AdminLoadTestPanel> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const AdminToolsRoleLegend(
+              highlight: AdminToolRole.loadTest,
+              compact: true,
+            ),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -634,6 +641,7 @@ class _AdminLoadTestPanelState extends State<AdminLoadTestPanel> {
       RoomType.elite => lang.t('room_elite_title'),
       RoomType.unique => lang.t('room_unique_title'),
       RoomType.simple => lang.t('room_simple_title'),
+      RoomType.hardcore => lang.t('room_hardcore_title'),
     };
   }
 

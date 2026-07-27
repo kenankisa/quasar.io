@@ -5,20 +5,30 @@ import 'package:flutter/material.dart';
 import '../game/models/admin_stats.dart';
 import '../services/admin_access.dart';
 import '../services/admin_analytics_service.dart';
+import '../services/admin_game_trial_service.dart';
+import '../services/admin_hardcore_arena_test_service.dart';
+import '../services/admin_hardcore_live_service.dart';
 import '../services/admin_load_test_service.dart';
 import '../services/admin_messaging_service.dart';
 import '../services/admin_stats_service.dart';
+import '../services/app_economy_config_service.dart';
 import '../services/app_idle_config_service.dart';
 import '../services/app_rank_config_service.dart';
 import '../services/auth_service.dart';
 import '../services/lang_service.dart';
+import '../utils/lang_rebuild.dart';
+import '../utils/lang_scope.dart';
 import '../services/player_session_service.dart';
 import '../services/room_matchmaking_service.dart';
 import '../services/room_tuning_service.dart';
+import 'admin/admin_hardcore_panel.dart';
 import 'admin/admin_nav.dart';
 import 'admin/admin_overview_panel.dart';
+import 'admin/admin_theme.dart';
 import 'admin/admin_universes_panel.dart';
 import 'admin_analytics_panel.dart';
+import 'admin_economy_settings_panel.dart';
+import 'admin_game_trial_panel.dart';
 import 'admin_idle_settings_panel.dart';
 import 'admin_load_test_panel.dart';
 import 'admin_messages_panel.dart';
@@ -26,7 +36,7 @@ import 'admin_rank_settings_panel.dart';
 import 'lobby_screen.dart';
 import 'neon_space_particle_painter.dart';
 
-/// Oyunun sahibi için yönetim paneli — yalnızca [AdminAccess] izin verir.
+/// Owner admin console — only [AdminAccess] may open this screen.
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
 
@@ -35,7 +45,8 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver, LangChangeListener {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late final AnimationController _particleController;
   bool _signingOut = false;
   bool _verifying = true;
@@ -44,11 +55,17 @@ class _AdminScreenState extends State<AdminScreen>
   final Set<AdminNavSection> _loadedSections = {AdminNavSection.live};
 
   @override
+  void onLangChanged() => setState(() {});
+
+  @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Panel açıkken AFK ile atılmayı engelle; lobi/maçta admin de oyuncu gibidir.
-    PlayerSessionService.instance.setIdleSuppressed(true);
+    // Defer — setIdleSuppressed notifies listeners; doing it mid-build throws.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      PlayerSessionService.instance.setIdleSuppressed(true);
+    });
     _particleController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 40),
@@ -80,17 +97,21 @@ class _AdminScreenState extends State<AdminScreen>
       _verifying = false;
       _allowed = true;
     });
-    // Sadece canlı istatistik + badge; diğer sekmeler ilk ziyarette yüklenir.
     AdminStatsService.instance.attach();
+    AdminHardcoreLiveService.instance.attach();
     unawaited(AdminMessagingService.instance.refreshUnreadCount());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    PlayerSessionService.instance.setIdleSuppressed(false);
+    // Schedule after unlock — dispose runs while the tree is locked.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PlayerSessionService.instance.setIdleSuppressed(false);
+    });
     _particleController.dispose();
     AdminStatsService.instance.detach();
+    AdminHardcoreLiveService.instance.detach();
     super.dispose();
   }
 
@@ -99,6 +120,14 @@ class _AdminScreenState extends State<AdminScreen>
       case AdminNavSection.live:
       case AdminNavSection.players:
         await AdminStatsService.instance.refresh();
+      case AdminNavSection.hardcore:
+        await Future.wait([
+          AdminHardcoreLiveService.instance.refresh(),
+          AdminHardcoreArenaTestService.instance.refreshOps(),
+          RoomTuningService.instance.refreshFromRemote(),
+          AppEconomyConfigService.instance.refreshFromRemote(),
+          AppIdleConfigService.instance.refreshFromRemote(),
+        ]);
       case AdminNavSection.analytics:
         await AdminAnalyticsService.instance.refresh();
       case AdminNavSection.universes:
@@ -110,11 +139,15 @@ class _AdminScreenState extends State<AdminScreen>
         await AppIdleConfigService.instance.refreshFromRemote();
       case AdminNavSection.ranks:
         await AppRankConfigService.instance.refreshFromRemote();
+      case AdminNavSection.economy:
+        await AppEconomyConfigService.instance.refreshFromRemote();
       case AdminNavSection.loadTest:
         await Future.wait([
           AdminLoadTestService.instance.refresh(),
           AdminStatsService.instance.refresh(),
         ]);
+      case AdminNavSection.gameTrial:
+        await AdminGameTrialService.instance.refresh();
       case AdminNavSection.messages:
         await AdminMessagingService.instance.refresh();
     }
@@ -126,6 +159,13 @@ class _AdminScreenState extends State<AdminScreen>
       case AdminNavSection.live:
       case AdminNavSection.players:
         break;
+      case AdminNavSection.hardcore:
+        unawaited(Future.wait([
+          AdminHardcoreLiveService.instance.refresh(),
+          RoomTuningService.instance.refreshFromRemote(),
+          AppEconomyConfigService.instance.refreshFromRemote(),
+          AppIdleConfigService.instance.refreshFromRemote(),
+        ]));
       case AdminNavSection.analytics:
         unawaited(AdminAnalyticsService.instance.refresh());
       case AdminNavSection.universes:
@@ -134,8 +174,12 @@ class _AdminScreenState extends State<AdminScreen>
         unawaited(AppIdleConfigService.instance.refreshFromRemote());
       case AdminNavSection.ranks:
         unawaited(AppRankConfigService.instance.refreshFromRemote());
+      case AdminNavSection.economy:
+        unawaited(AppEconomyConfigService.instance.refreshFromRemote());
       case AdminNavSection.loadTest:
         unawaited(AdminLoadTestService.instance.refresh());
+      case AdminNavSection.gameTrial:
+        unawaited(AdminGameTrialService.instance.refresh());
       case AdminNavSection.messages:
         unawaited(AdminMessagingService.instance.refresh());
     }
@@ -175,6 +219,16 @@ class _AdminScreenState extends State<AdminScreen>
           AdminStatsService.instance,
           LanguageService.instance,
         ]),
+      AdminNavSection.hardcore => Listenable.merge([
+          AdminHardcoreLiveService.instance,
+          AdminHardcoreArenaTestService.instance,
+          AdminGameTrialService.instance,
+          AdminStatsService.instance,
+          RoomTuningService.instance,
+          AppEconomyConfigService.instance,
+          AppIdleConfigService.instance,
+          LanguageService.instance,
+        ]),
       AdminNavSection.analytics => Listenable.merge([
           AdminAnalyticsService.instance,
           LanguageService.instance,
@@ -192,8 +246,18 @@ class _AdminScreenState extends State<AdminScreen>
           AppRankConfigService.instance,
           LanguageService.instance,
         ]),
+      AdminNavSection.economy => Listenable.merge([
+          AppEconomyConfigService.instance,
+          LanguageService.instance,
+        ]),
       AdminNavSection.loadTest => Listenable.merge([
           AdminLoadTestService.instance,
+          LanguageService.instance,
+        ]),
+      AdminNavSection.gameTrial => Listenable.merge([
+          AdminGameTrialService.instance,
+          AdminStatsService.instance,
+          AdminHardcoreLiveService.instance,
           LanguageService.instance,
         ]),
       AdminNavSection.messages => LanguageService.instance,
@@ -213,19 +277,45 @@ class _AdminScreenState extends State<AdminScreen>
   Widget build(BuildContext context) {
     if (_verifying || !_allowed) {
       return const Scaffold(
-        backgroundColor: Color(0xFF020208),
+        backgroundColor: AdminTheme.bg,
         body: Center(
-          child: CircularProgressIndicator(color: Color(0xFF00F0FF)),
+          child: CircularProgressIndicator(color: AdminTheme.accent),
         ),
       );
     }
 
     final size = MediaQuery.sizeOf(context);
     final email = AuthService.instance.currentUser?.email ?? '';
-    final wide = size.width >= 900;
+    final wide = size.width >= 980;
+    final medium = size.width >= 720;
+    final useDrawer = !medium;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF020208),
+      key: _scaffoldKey,
+      backgroundColor: AdminTheme.bg,
+      drawer: useDrawer
+          ? ListenableBuilder(
+              listenable: Listenable.merge([
+                AdminStatsService.instance,
+                AdminHardcoreLiveService.instance,
+                AdminMessagingService.instance,
+                LanguageService.instance,
+              ]),
+              builder: (context, _) {
+                final stats = AdminStatsService.instance.snapshot;
+                return AdminNavDrawer(
+                  selected: _section,
+                  onSelected: _selectSection,
+                  livePlayers: stats.totalPlayers,
+                  hardcorePlayers:
+                      AdminHardcoreLiveService.instance.snapshot.seatOccupancy,
+                  activeSessions: stats.activeSessions,
+                  unreadMessages: AdminMessagingService.instance.unreadCount,
+                  email: email,
+                );
+              },
+            )
+          : null,
       body: Stack(
         children: [
           RepaintBoundary(
@@ -236,10 +326,10 @@ class _AdminScreenState extends State<AdminScreen>
                   size: size,
                   painter: NeonSpaceParticlePainter(
                     progress: _particleController.value,
-                    particleCount: 18,
+                    particleCount: 14,
                     seed: 91,
                     blurSigma: 2,
-                    maxOpacity: 0.32,
+                    maxOpacity: 0.22,
                   ),
                 );
               },
@@ -248,11 +338,11 @@ class _AdminScreenState extends State<AdminScreen>
           Container(
             decoration: const BoxDecoration(
               gradient: RadialGradient(
-                center: Alignment(0, -0.75),
-                radius: 1.35,
+                center: Alignment(-0.55, -0.85),
+                radius: 1.25,
                 colors: [
-                  Color(0x3322FFAA),
-                  Color(0xFF020208),
+                  Color(0x2200D4E8),
+                  AdminTheme.bg,
                 ],
               ),
             ),
@@ -268,6 +358,8 @@ class _AdminScreenState extends State<AdminScreen>
                       email: email,
                       signingOut: _signingOut,
                       section: _section,
+                      showMenuButton: useDrawer,
+                      onMenu: () => _scaffoldKey.currentState?.openDrawer(),
                       onRefresh: () => unawaited(_refreshCurrentSection()),
                       onLobby: _openLobby,
                       onSignOut: _signOut,
@@ -275,13 +367,15 @@ class _AdminScreenState extends State<AdminScreen>
                   },
                 ),
                 Expanded(
-                  child: wide
-                      ? Row(
+                  child: useDrawer
+                      ? _buildSectionArea()
+                      : Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             ListenableBuilder(
                               listenable: Listenable.merge([
                                 AdminStatsService.instance,
+                                AdminHardcoreLiveService.instance,
                                 AdminMessagingService.instance,
                                 LanguageService.instance,
                               ]),
@@ -292,32 +386,16 @@ class _AdminScreenState extends State<AdminScreen>
                                   selected: _section,
                                   onSelected: _selectSection,
                                   livePlayers: stats.totalPlayers,
+                                  hardcorePlayers: AdminHardcoreLiveService
+                                      .instance.snapshot.seatOccupancy,
                                   activeSessions: stats.activeSessions,
                                   unreadMessages: AdminMessagingService
                                       .instance.unreadCount,
+                                  compact: !wide,
                                 );
                               },
                             ),
                             Expanded(child: _buildSectionArea()),
-                          ],
-                        )
-                      : Column(
-                          children: [
-                            Expanded(child: _buildSectionArea()),
-                            ListenableBuilder(
-                              listenable: Listenable.merge([
-                                AdminMessagingService.instance,
-                                LanguageService.instance,
-                              ]),
-                              builder: (context, _) {
-                                return AdminBottomNav(
-                                  selected: _section,
-                                  onSelected: _selectSection,
-                                  unreadMessages: AdminMessagingService
-                                      .instance.unreadCount,
-                                );
-                              },
-                            ),
                           ],
                         ),
                 ),
@@ -335,7 +413,7 @@ class _AdminScreenState extends State<AdminScreen>
       builder: (context, _) {
         if (_showInitialStatsGate()) {
           return const Center(
-            child: CircularProgressIndicator(color: Color(0xFF00F0FF)),
+            child: CircularProgressIndicator(color: AdminTheme.accent),
           );
         }
 
@@ -345,7 +423,6 @@ class _AdminScreenState extends State<AdminScreen>
           stats: stats,
           error: AdminStatsService.instance.error,
           tuningError: RoomTuningService.instance.error,
-          analyticsError: AdminAnalyticsService.instance.error,
           onRefresh: _refreshCurrentSection,
           formatTime: _formatTime,
         );
@@ -368,7 +445,6 @@ class _AdminSectionBody extends StatelessWidget {
     required this.stats,
     required this.error,
     required this.tuningError,
-    required this.analyticsError,
     required this.onRefresh,
     required this.formatTime,
   });
@@ -377,56 +453,64 @@ class _AdminSectionBody extends StatelessWidget {
   final AdminStatsSnapshot stats;
   final String? error;
   final String? tuningError;
-  final String? analyticsError;
   final Future<void> Function() onRefresh;
   final String Function(DateTime) formatTime;
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
 
     return RefreshIndicator(
-      color: const Color(0xFF00F0FF),
-      backgroundColor: const Color(0xFF0A0A1A),
+      color: AdminTheme.accent,
+      backgroundColor: AdminTheme.surface,
       onRefresh: onRefresh,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-        children: [
-          AdminPageHeader(
-            title: lang.t(section.titleKey),
-            description: lang.t(section.descKey),
-          ),
-          if (error != null && section == AdminNavSection.live) ...[
-            const SizedBox(height: 12),
-            AdminErrorBanner(message: lang.t(error!)),
-          ],
-          if (tuningError != null &&
-              section == AdminNavSection.universes) ...[
-            const SizedBox(height: 12),
-            AdminErrorBanner(message: lang.t(tuningError!)),
-          ],
-          if (analyticsError != null &&
-              section == AdminNavSection.analytics) ...[
-            // Analytics panel already shows a friendly migration hint.
-          ],
-          const SizedBox(height: 16),
-          ..._sectionChildren(),
-          if (section == AdminNavSection.live ||
-              section == AdminNavSection.players) ...[
-            const SizedBox(height: 20),
-            Text(
-              lang.t('admin_last_updated').replaceAll(
-                    '{time}',
-                    formatTime(stats.fetchedAt),
-                  ),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.35),
-                fontSize: 11,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: AdminTheme.contentMaxWidth),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 36),
+            children: [
+              AdminPageHeader(
+                title: lang.t(section.titleKey),
+                description: lang.t(section.descKey),
               ),
-            ),
-          ],
-        ],
+              if (error != null && section == AdminNavSection.live) ...[
+                const SizedBox(height: 12),
+                AdminErrorBanner(message: lang.t(error!)),
+              ],
+              if (tuningError != null &&
+                  (section == AdminNavSection.universes ||
+                      section == AdminNavSection.hardcore)) ...[
+                const SizedBox(height: 12),
+                AdminErrorBanner(message: lang.t(tuningError!)),
+              ],
+              const SizedBox(height: 18),
+              ..._sectionChildren(),
+              if (section == AdminNavSection.live ||
+                  section == AdminNavSection.players ||
+                  section == AdminNavSection.hardcore) ...[
+                const SizedBox(height: 22),
+                Text(
+                  lang.t('admin_last_updated').replaceAll(
+                        '{time}',
+                        formatTime(
+                          section == AdminNavSection.hardcore
+                              ? AdminHardcoreLiveService
+                                  .instance.snapshot.fetchedAt
+                              : stats.fetchedAt,
+                        ),
+                      ),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AdminTheme.textMuted,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -436,8 +520,12 @@ class _AdminSectionBody extends StatelessWidget {
       case AdminNavSection.live:
         return [
           AdminOverviewGrid(stats: stats),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           AdminLiveUniverseSummary(stats: stats),
+        ];
+      case AdminNavSection.hardcore:
+        return const [
+          AdminHardcorePanel(),
         ];
       case AdminNavSection.analytics:
         return const [AdminAnalyticsPanel()];
@@ -449,6 +537,8 @@ class _AdminSectionBody extends StatelessWidget {
         return const [AdminIdleSettingsPanel()];
       case AdminNavSection.ranks:
         return const [AdminRankSettingsPanel()];
+      case AdminNavSection.economy:
+        return const [AdminEconomySettingsPanel()];
       case AdminNavSection.players:
         return [
           AdminPlayerStatsCard(stats: stats),
@@ -457,6 +547,8 @@ class _AdminSectionBody extends StatelessWidget {
         ];
       case AdminNavSection.loadTest:
         return const [AdminLoadTestPanel()];
+      case AdminNavSection.gameTrial:
+        return const [AdminGameTrialPanel()];
       case AdminNavSection.messages:
         return const [AdminMessagesPanel()];
     }

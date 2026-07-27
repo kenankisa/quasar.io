@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../utils/lang_scope.dart';
 
 import '../../game/models/admin_stats.dart';
 import '../../game/room_type.dart';
-import '../../services/lang_service.dart';
+import 'admin_theme.dart';
+import 'admin_universes_panel.dart' show accentForRoom, roomTitle;
 
 class AdminLiveUniverseSummary extends StatelessWidget {
   const AdminLiveUniverseSummary({super.key, required this.stats});
@@ -11,27 +13,21 @@ class AdminLiveUniverseSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          lang.t('admin_universes_section'),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 10),
-        for (final type in RoomType.values) ...[
-          _LiveUniverseRow(
-            type: type,
-            tier: stats.tiers[type] ?? AdminUniverseTierStats.empty(type),
-          ),
-          const SizedBox(height: 8),
+    final lang = context.lang;
+    return AdminPanelCard(
+      title: lang.t('admin_universes_section'),
+      child: Column(
+        children: [
+          for (final type in RoomType.values
+              .where((t) => t != RoomType.hardcore)) ...[
+            if (type != RoomType.simple) const SizedBox(height: 8),
+            _LiveUniverseRow(
+              type: type,
+              tier: stats.tiers[type] ?? AdminUniverseTierStats.empty(type),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -47,14 +43,14 @@ class _LiveUniverseRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
-    final accent = _accentForRoom(type);
+    final lang = context.lang;
+    final accent = accentForRoom(type);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withValues(alpha: 0.28)),
-        color: const Color(0xFF0A0A1A).withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(AdminTheme.radiusSm),
+        border: Border.all(color: accent.withValues(alpha: 0.25)),
+        color: AdminTheme.surface.withValues(alpha: 0.55),
       ),
       child: Row(
         children: [
@@ -66,7 +62,7 @@ class _LiveUniverseRow extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _roomTitle(lang, type),
+              roomTitle(lang, type),
               style: TextStyle(
                 color: accent,
                 fontWeight: FontWeight.w800,
@@ -79,17 +75,29 @@ class _LiveUniverseRow extends StatelessWidget {
             value: '${tier.players}',
             color: accent,
           ),
-          const SizedBox(width: 8),
-          _MiniCount(
-            icon: Icons.smart_toy_outlined,
-            value: '${tier.bots}',
-            color: const Color(0xFFFF00AA),
-          ),
+          if (type.allowsBots) ...[
+            const SizedBox(width: 8),
+            _MiniCount(
+              icon: Icons.smart_toy_outlined,
+              value: '${tier.bots}',
+              color: const Color(0xFFFF00AA),
+            ),
+          ] else ...[
+            const SizedBox(width: 8),
+            Text(
+              lang.t('admin_tune_players_only'),
+              style: TextStyle(
+                color: accent.withValues(alpha: 0.75),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
           const SizedBox(width: 8),
           _MiniCount(
             icon: Icons.public_rounded,
             value: '${tier.activeUniverses}',
-            color: const Color(0xFF22FFAA),
+            color: AdminTheme.accentSoft,
           ),
         ],
       ),
@@ -104,30 +112,34 @@ class AdminOverviewGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 640;
         final tiles = [
-          _StatTile(
+          AdminMetricTile(
             label: lang.t('admin_total_players'),
             value: '${stats.totalPlayers}',
-            accent: const Color(0xFF00F0FF),
+            accent: AdminTheme.accent,
+            icon: Icons.person_rounded,
           ),
-          _StatTile(
+          AdminMetricTile(
             label: lang.t('admin_total_bots'),
             value: '${stats.totalBots}',
             accent: const Color(0xFFFF00AA),
+            icon: Icons.smart_toy_outlined,
           ),
-          _StatTile(
+          AdminMetricTile(
             label: lang.t('admin_total_universes'),
             value: '${stats.totalActiveUniverses}',
-            accent: const Color(0xFF22FFAA),
+            accent: AdminTheme.accentSoft,
+            icon: Icons.public_rounded,
           ),
-          _StatTile(
+          AdminMetricTile(
             label: lang.t('admin_active_sessions'),
             value: '${stats.activeSessions}',
-            accent: const Color(0xFFFFC857),
+            accent: AdminTheme.warning,
+            icon: Icons.login_rounded,
           ),
         ];
 
@@ -164,72 +176,6 @@ class AdminOverviewGrid extends StatelessWidget {
       },
     );
   }
-}
-
-class _StatTile extends StatelessWidget {
-  const _StatTile({
-    required this.label,
-    required this.value,
-    required this.accent,
-  });
-
-  final String label;
-  final String value;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withValues(alpha: 0.35)),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            accent.withValues(alpha: 0.14),
-            const Color(0xFF0A0A1A).withValues(alpha: 0.9),
-          ],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.55),
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              color: accent,
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              height: 1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-Color _accentForRoom(RoomType type) => switch (type) {
-      RoomType.simple => const Color(0xFF7AD7FF),
-      RoomType.normal => const Color(0xFF00F0FF),
-      RoomType.elite => const Color(0xFFFFC857),
-      RoomType.unique => const Color(0xFFFF00AA),
-    };
-
-String _roomTitle(LanguageService lang, RoomType type) {
-  final title = lang.t(type.instanceTitleKey).replaceAll('{number}', '').trim();
-  return title.isEmpty ? type.name : title;
 }
 
 class _MiniCount extends StatelessWidget {
@@ -270,16 +216,10 @@ class AdminPlayerStatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF00F0FF).withValues(alpha: 0.25),
-        ),
-        color: const Color(0xFF0A0A1A).withValues(alpha: 0.78),
-      ),
+    final lang = context.lang;
+    return AdminPanelCard(
+      accentColor: AdminTheme.accent,
+      title: lang.t('admin_page_players_title'),
       child: Column(
         children: [
           _MetricRow(
@@ -327,8 +267,8 @@ class _MetricRow extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.55),
+            style: const TextStyle(
+              color: AdminTheme.textSecondary,
               fontSize: 13,
             ),
           ),
@@ -336,7 +276,7 @@ class _MetricRow extends StatelessWidget {
         Text(
           value,
           style: const TextStyle(
-            color: Colors.white,
+            color: AdminTheme.textPrimary,
             fontWeight: FontWeight.w800,
             fontSize: 15,
           ),
@@ -353,111 +293,70 @@ class AdminTopWinnersCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFFFC857).withValues(alpha: 0.28),
-        ),
-        color: const Color(0xFF0A0A1A).withValues(alpha: 0.78),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            lang.t('admin_top_winners'),
-            style: const TextStyle(
-              color: Color(0xFFFFC857),
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (winners.isEmpty)
-            Text(
+    final lang = context.lang;
+    return AdminPanelCard(
+      accentColor: AdminTheme.warning,
+      title: lang.t('admin_top_winners'),
+      child: winners.isEmpty
+          ? Text(
               lang.t('admin_no_players_yet'),
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
+              style: const TextStyle(
+                color: AdminTheme.textMuted,
                 fontSize: 12,
               ),
             )
-          else
-            ...winners.asMap().entries.map((entry) {
-              final rank = entry.key + 1;
-              final winner = entry.value;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 28,
-                      child: Text(
-                        '#$rank',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.45),
+          : Column(
+              children: winners.asMap().entries.map((entry) {
+                final rank = entry.key + 1;
+                final winner = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 28,
+                        child: Text(
+                          '#$rank',
+                          style: const TextStyle(
+                            color: AdminTheme.textMuted,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          winner.username,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AdminTheme.textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${winner.gamesWon} ★',
+                        style: const TextStyle(
+                          color: AdminTheme.warning,
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        winner.username,
-                        overflow: TextOverflow.ellipsis,
+                      const SizedBox(width: 10),
+                      Text(
+                        '◆ ${winner.diamonds}',
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
+                          color: AdminTheme.accent,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
                         ),
                       ),
-                    ),
-                    Text(
-                      '${winner.gamesWon} ★',
-                      style: const TextStyle(
-                        color: Color(0xFFFFC857),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '◆ ${winner.diamonds}',
-                      style: const TextStyle(
-                        color: Color(0xFF00F0FF),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-}
-
-class AdminErrorBanner extends StatelessWidget {
-  const AdminErrorBanner({super.key, required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: Colors.red.withValues(alpha: 0.15),
-        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        message,
-        style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
     );
   }
 }

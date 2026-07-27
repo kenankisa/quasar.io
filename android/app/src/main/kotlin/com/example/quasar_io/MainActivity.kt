@@ -15,7 +15,12 @@ import kotlin.math.abs
 class MainActivity : FlutterActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    applyMaxFps(TARGET_FPS)
+    try {
+      applyMaxFps(TARGET_FPS)
+    } catch (t: Throwable) {
+      // Never kill the process over display-mode quirks on OEM ROMs.
+      android.util.Log.w("QuasarMain", "applyMaxFps failed", t)
+    }
   }
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

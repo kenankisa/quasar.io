@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
+
+import 'dart:async';
 
 import '../game/config/bot_difficulty.dart';
+import '../game/config/hardcore_rules.dart';
 import '../game/config/universe_difficulty.dart';
+import '../game/models/app_economy_config.dart';
+import '../game/models/app_idle_config.dart';
+import '../game/models/hardcore_arena_tuning.dart';
 import '../game/models/room_game_tuning.dart';
 import '../game/room_type.dart';
+import '../services/app_economy_config_service.dart';
+import '../services/app_idle_config_service.dart';
 import '../services/lang_service.dart';
 import '../services/room_tuning_service.dart';
 
@@ -14,6 +23,8 @@ enum AdminTuningCategory {
   events,
   radiation,
   bots,
+  /// Hardcore-only: arena rules summary (no bots).
+  hardcoreRules,
 }
 
 /// Seçili evren için sekmeli denge editörü.
@@ -31,7 +42,7 @@ class AdminRoomTuningEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final tuning = RoomTuningService.instance.tuningFor(roomType);
     final saving = RoomTuningService.instance.saving;
     final defaults = RoomGameTuning.defaultsFor(roomType);
@@ -76,7 +87,17 @@ class AdminRoomTuningEditor extends StatelessWidget {
           accent: accent,
           lang: lang,
         ),
-      AdminTuningCategory.bots => _BotsPane(
+      AdminTuningCategory.bots => roomType.allowsBots
+          ? _BotsPane(
+              roomType: roomType,
+              tuning: tuning,
+              defaults: defaults,
+              saving: saving,
+              accent: accent,
+              lang: lang,
+            )
+          : const SizedBox.shrink(),
+      AdminTuningCategory.hardcoreRules => _HardcoreRulesPane(
           roomType: roomType,
           tuning: tuning,
           defaults: defaults,
@@ -131,11 +152,13 @@ class _WorldPane extends StatelessWidget {
         const SizedBox(height: 10),
         _SliderRow(
           label: lang.t('admin_tune_victory_radius'),
-          helpKey: 'admin_help_victory_radius',
+          helpKey: roomType == RoomType.hardcore
+              ? 'admin_help_hardcore_victory_radius'
+              : 'admin_help_victory_radius',
           value: tuning.victoryRadius,
-          min: 200,
-          max: 900,
-          divisions: 70,
+          min: roomType == RoomType.hardcore ? 400 : 200,
+          max: roomType == RoomType.hardcore ? 800 : 900,
+          divisions: roomType == RoomType.hardcore ? 40 : 70,
           display: tuning.victoryRadius.round().toString(),
           defaultLabel: defaults.victoryRadius.round().toString(),
           enabled: !saving,
@@ -192,6 +215,49 @@ class _WorldPane extends StatelessWidget {
             (t) => t.copyWith(worldSize: v),
           ),
         ),
+        _SliderRow(
+          label: lang.t('admin_tune_max_players'),
+          helpKey: roomType == RoomType.hardcore
+              ? 'admin_help_hardcore_max_players'
+              : 'admin_help_max_players',
+          value: tuning.maxPlayers.toDouble(),
+          min: roomType == RoomType.simple
+              ? 1
+              : roomType == RoomType.hardcore
+                  ? 0
+                  : 2,
+          max: roomType == RoomType.hardcore ? 100 : 20,
+          divisions: roomType == RoomType.simple
+              ? 1
+              : roomType == RoomType.hardcore
+                  ? 100
+                  : 18,
+          display: '${tuning.maxPlayers}',
+          defaultLabel: '${defaults.maxPlayers}',
+          enabled: !saving,
+          accent: accent,
+          onChanged: (v) => AdminRoomTuningEditor.patch(
+            roomType,
+            (t) => t.copyWith(maxPlayers: v.round()),
+            false,
+          ),
+          onChangeEnd: (v) => AdminRoomTuningEditor.patch(
+            roomType,
+            (t) => t.copyWith(maxPlayers: v.round()),
+          ),
+        ),
+        if (roomType.isPlayersOnly)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              lang.t('admin_tune_hardcore_players_only'),
+              style: TextStyle(
+                color: accent.withValues(alpha: 0.75),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ),
         _SliderRow(
           label: lang.t('admin_tune_food_growth'),
           helpKey: 'admin_help_food_growth',
@@ -646,6 +712,66 @@ class _EventsPane extends StatelessWidget {
                     (t) => t.copyWith(supernovaPlanetCount: v),
                   ),
                 ),
+                _SliderRow(
+                  label: lang.t('admin_tune_supernova_shrink_min'),
+                  helpKey: 'admin_help_supernova_shrink_min',
+                  value: tuning.supernovaShrinkPercentMin,
+                  min: 3,
+                  max: 50,
+                  divisions: 47,
+                  display: '${tuning.supernovaShrinkPercentMin.round()}%',
+                  defaultLabel:
+                      '${defaults.supernovaShrinkPercentMin.round()}%',
+                  enabled: !saving && eventsOn,
+                  accent: accent,
+                  onChanged: (v) {
+                    final max = tuning.supernovaShrinkPercentMax;
+                    final clamped = v > max ? max : v;
+                    AdminRoomTuningEditor.patch(
+                      roomType,
+                      (t) => t.copyWith(supernovaShrinkPercentMin: clamped),
+                      false,
+                    );
+                  },
+                  onChangeEnd: (v) {
+                    final max = tuning.supernovaShrinkPercentMax;
+                    final clamped = v > max ? max : v;
+                    AdminRoomTuningEditor.patch(
+                      roomType,
+                      (t) => t.copyWith(supernovaShrinkPercentMin: clamped),
+                    );
+                  },
+                ),
+                _SliderRow(
+                  label: lang.t('admin_tune_supernova_shrink_max'),
+                  helpKey: 'admin_help_supernova_shrink_max',
+                  value: tuning.supernovaShrinkPercentMax,
+                  min: 10,
+                  max: 60,
+                  divisions: 50,
+                  display: '${tuning.supernovaShrinkPercentMax.round()}%',
+                  defaultLabel:
+                      '${defaults.supernovaShrinkPercentMax.round()}%',
+                  enabled: !saving && eventsOn,
+                  accent: accent,
+                  onChanged: (v) {
+                    final min = tuning.supernovaShrinkPercentMin;
+                    final clamped = v < min ? min : v;
+                    AdminRoomTuningEditor.patch(
+                      roomType,
+                      (t) => t.copyWith(supernovaShrinkPercentMax: clamped),
+                      false,
+                    );
+                  },
+                  onChangeEnd: (v) {
+                    final min = tuning.supernovaShrinkPercentMin;
+                    final clamped = v < min ? min : v;
+                    AdminRoomTuningEditor.patch(
+                      roomType,
+                      (t) => t.copyWith(supernovaShrinkPercentMax: clamped),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -792,6 +918,695 @@ class _RadiationPane extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Hardcore arena rules — economy + arena package + AFK + fixed rules.
+class _HardcoreRulesPane extends StatelessWidget {
+  const _HardcoreRulesPane({
+    required this.roomType,
+    required this.tuning,
+    required this.defaults,
+    required this.saving,
+    required this.accent,
+    required this.lang,
+  });
+
+  final RoomType roomType;
+  final RoomGameTuning tuning;
+  final RoomGameTuning defaults;
+  final bool saving;
+  final Color accent;
+  final LanguageService lang;
+
+  void _patchArena(
+    HardcoreArenaTuning Function(HardcoreArenaTuning a) transform, [
+    bool persist = false,
+  ]) {
+    AdminRoomTuningEditor.patch(
+      roomType,
+      (t) => t.copyWith(hardcoreArena: transform(t.hardcoreArena)),
+      persist,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        AppEconomyConfigService.instance,
+        AppIdleConfigService.instance,
+        RoomTuningService.instance,
+      ]),
+      builder: (context, _) {
+        final economy = AppEconomyConfigService.instance;
+        final idle = AppIdleConfigService.instance;
+        final config = economy.config;
+        final ecoDefaults = AppEconomyConfig.defaults;
+        final idleConfig = idle.config;
+        final idleDefaults = AppIdleConfig.defaults;
+        final arena =
+            RoomTuningService.instance.tuningFor(roomType).hardcoreArena;
+        final arenaDefaults = defaults.hardcoreArena;
+        final busy = saving || economy.saving || idle.saving;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _CategoryIntro(
+              text: lang.t('admin_tune_hardcore_rules_hint'),
+              title: lang.t('admin_tune_tab_hardcore_rules'),
+              helpKey: 'admin_help_hardcore_rules',
+              accent: accent,
+            ),
+            const SizedBox(height: 10),
+            _HardcoreRuleCard(
+              accent: accent,
+              rows: [
+                (
+                  lang.t('admin_hardcore_rule_players'),
+                  '${tuning.maxPlayers}',
+                ),
+                (
+                  lang.t('admin_hardcore_rule_admin_seat'),
+                  lang.t('admin_hardcore_rule_admin_seat_value'),
+                ),
+                (
+                  lang.t('admin_hardcore_rule_bots'),
+                  lang.t('admin_tune_players_only'),
+                ),
+                (
+                  lang.t('admin_hardcore_rule_start'),
+                  '${tuning.playerStartRadius.round()}',
+                ),
+                (
+                  lang.t('admin_hardcore_rule_victory'),
+                  '${tuning.victoryRadius.round()}',
+                ),
+                (
+                  lang.t('admin_hardcore_rule_cooldown'),
+                  '1h',
+                ),
+                (
+                  lang.t('admin_hardcore_rule_queue'),
+                  lang.t('admin_hardcore_rule_queue_yes'),
+                ),
+                (
+                  lang.t('admin_hardcore_rule_universe'),
+                  lang.t('admin_hardcore_rule_universe_single'),
+                ),
+                (
+                  lang.t('admin_hardcore_rule_points'),
+                  '+${HardcoreRules.victoryHardcorePoints}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              lang.t('admin_hardcore_arena_section'),
+              style: TextStyle(
+                color: accent,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              lang.t('admin_hardcore_arena_hint'),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.45),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _SliderRow(
+              label: lang.t('admin_hardcore_arena_shield'),
+              helpKey: 'admin_help_hardcore_arena_shield',
+              value: arena.spawnProtectionSeconds,
+              min: 3,
+              max: 30,
+              divisions: 27,
+              display: '${arena.spawnProtectionSeconds.round()}s',
+              defaultLabel: '${arenaDefaults.spawnProtectionSeconds.round()}s',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => _patchArena(
+                (a) => a.copyWith(spawnProtectionSeconds: v),
+              ),
+              onChangeEnd: (v) => _patchArena(
+                (a) => a.copyWith(spawnProtectionSeconds: v),
+              ),
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_arena_min_alive'),
+              helpKey: 'admin_help_hardcore_arena_min_alive',
+              value: arena.victoryMinAlive.toDouble(),
+              min: 2,
+              max: 20,
+              divisions: 18,
+              display: '${arena.victoryMinAlive}',
+              defaultLabel: '${arenaDefaults.victoryMinAlive}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => _patchArena(
+                (a) => a.copyWith(victoryMinAlive: v.round()),
+              ),
+              onChangeEnd: (v) {
+                final n = v.round();
+                _patchArena((a) => a.copyWith(victoryMinAlive: n));
+                economy.updateConfig(
+                  (c) => c.copyWith(hardcoreArenaMinAlive: n),
+                );
+                unawaited(economy.save());
+              },
+            ),
+            const SizedBox(height: 10),
+            Text(
+              lang.t('admin_hardcore_arena_sim_section'),
+              style: TextStyle(
+                color: accent.withValues(alpha: 0.85),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            _SliderRow(
+              label: lang.t('admin_hardcore_arena_stable'),
+              helpKey: 'admin_help_hardcore_arena_stable',
+              value: arena.victoryStableSeconds,
+              min: 0,
+              max: 60,
+              divisions: 60,
+              display: '${arena.victoryStableSeconds.round()}s',
+              defaultLabel: '${arenaDefaults.victoryStableSeconds.round()}s',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => _patchArena(
+                (a) => a.copyWith(victoryStableSeconds: v),
+              ),
+              onChangeEnd: (v) => _patchArena(
+                (a) => a.copyWith(victoryStableSeconds: v),
+              ),
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_arena_pvp'),
+              helpKey: 'admin_help_hardcore_arena_pvp',
+              value: arena.victoryMinPvpMassFraction * 100,
+              min: 0,
+              max: 80,
+              divisions: 80,
+              display: '${(arena.victoryMinPvpMassFraction * 100).round()}%',
+              defaultLabel:
+                  '${(arenaDefaults.victoryMinPvpMassFraction * 100).round()}%',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => _patchArena(
+                (a) => a.copyWith(victoryMinPvpMassFraction: v / 100),
+              ),
+              onChangeEnd: (v) => _patchArena(
+                (a) => a.copyWith(victoryMinPvpMassFraction: v / 100),
+              ),
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_low_pop_cap'),
+              helpKey: 'admin_help_hardcore_low_pop_cap',
+              value: arena.lowPopRadiusCap,
+              min: 200,
+              max: 550,
+              divisions: 35,
+              display: '${arena.lowPopRadiusCap.round()}',
+              defaultLabel: '${arenaDefaults.lowPopRadiusCap.round()}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => _patchArena(
+                (a) => a.copyWith(lowPopRadiusCap: v),
+              ),
+              onChangeEnd: (v) => _patchArena(
+                (a) => a.copyWith(lowPopRadiusCap: v),
+              ),
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_food_late_radius'),
+              helpKey: 'admin_help_hardcore_food_late_radius',
+              value: arena.lateFoodSoftcapRadius,
+              min: 200,
+              max: 600,
+              divisions: 40,
+              display: '${arena.lateFoodSoftcapRadius.round()}',
+              defaultLabel: '${arenaDefaults.lateFoodSoftcapRadius.round()}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => _patchArena(
+                (a) => a.copyWith(lateFoodSoftcapRadius: v),
+              ),
+              onChangeEnd: (v) => _patchArena(
+                (a) => a.copyWith(lateFoodSoftcapRadius: v),
+              ),
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_food_late_mult'),
+              helpKey: 'admin_help_hardcore_food_late_mult',
+              value: arena.lateFoodSoftcapMultiplier,
+              min: 0.1,
+              max: 1.0,
+              divisions: 18,
+              display: '×${arena.lateFoodSoftcapMultiplier.toStringAsFixed(2)}',
+              defaultLabel:
+                  '×${arenaDefaults.lateFoodSoftcapMultiplier.toStringAsFixed(2)}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => _patchArena(
+                (a) => a.copyWith(lateFoodSoftcapMultiplier: v),
+              ),
+              onChangeEnd: (v) => _patchArena(
+                (a) => a.copyWith(lateFoodSoftcapMultiplier: v),
+              ),
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_food_pop_1'),
+              helpKey: 'admin_help_hardcore_food_pop',
+              value: arena.foodPopMult1,
+              min: 0,
+              max: 1.5,
+              divisions: 30,
+              display: '×${arena.foodPopMult1.toStringAsFixed(2)}',
+              defaultLabel: '×${arenaDefaults.foodPopMult1.toStringAsFixed(2)}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) =>
+                  _patchArena((a) => a.copyWith(foodPopMult1: v)),
+              onChangeEnd: (v) =>
+                  _patchArena((a) => a.copyWith(foodPopMult1: v)),
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_food_pop_2'),
+              helpKey: 'admin_help_hardcore_food_pop',
+              value: arena.foodPopMult2,
+              min: 0,
+              max: 1.5,
+              divisions: 30,
+              display: '×${arena.foodPopMult2.toStringAsFixed(2)}',
+              defaultLabel: '×${arenaDefaults.foodPopMult2.toStringAsFixed(2)}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) =>
+                  _patchArena((a) => a.copyWith(foodPopMult2: v)),
+              onChangeEnd: (v) =>
+                  _patchArena((a) => a.copyWith(foodPopMult2: v)),
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_food_pop_34'),
+              helpKey: 'admin_help_hardcore_food_pop',
+              value: arena.foodPopMult34,
+              min: 0,
+              max: 1.5,
+              divisions: 30,
+              display: '×${arena.foodPopMult34.toStringAsFixed(2)}',
+              defaultLabel:
+                  '×${arenaDefaults.foodPopMult34.toStringAsFixed(2)}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) =>
+                  _patchArena((a) => a.copyWith(foodPopMult34: v)),
+              onChangeEnd: (v) =>
+                  _patchArena((a) => a.copyWith(foodPopMult34: v)),
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_food_pop_5'),
+              helpKey: 'admin_help_hardcore_food_pop',
+              value: arena.foodPopMult5,
+              min: 0,
+              max: 1.5,
+              divisions: 30,
+              display: '×${arena.foodPopMult5.toStringAsFixed(2)}',
+              defaultLabel: '×${arenaDefaults.foodPopMult5.toStringAsFixed(2)}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) =>
+                  _patchArena((a) => a.copyWith(foodPopMult5: v)),
+              onChangeEnd: (v) =>
+                  _patchArena((a) => a.copyWith(foodPopMult5: v)),
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_food_pop_6'),
+              helpKey: 'admin_help_hardcore_food_pop',
+              value: arena.foodPopMult6Plus,
+              min: 0,
+              max: 1.5,
+              divisions: 30,
+              display: '×${arena.foodPopMult6Plus.toStringAsFixed(2)}',
+              defaultLabel:
+                  '×${arenaDefaults.foodPopMult6Plus.toStringAsFixed(2)}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) =>
+                  _patchArena((a) => a.copyWith(foodPopMult6Plus: v)),
+              onChangeEnd: (v) =>
+                  _patchArena((a) => a.copyWith(foodPopMult6Plus: v)),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              lang.t('admin_hardcore_arena_save_note'),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.4),
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              lang.t('admin_hardcore_economy_section'),
+              style: TextStyle(
+                color: accent,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              lang.t('admin_hardcore_economy_hint'),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.45),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _SliderRow(
+              label: lang.t('admin_hardcore_reward_victory'),
+              helpKey: 'admin_help_hardcore_reward_victory',
+              value: config.rewardHardcore1.toDouble(),
+              min: 0,
+              max: 100,
+              divisions: 100,
+              display: '+${config.rewardHardcore1}',
+              defaultLabel: '+${ecoDefaults.rewardHardcore1}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => economy.updateConfig(
+                (c) => c.copyWith(rewardHardcore1: v.round()),
+              ),
+              onChangeEnd: (v) {
+                economy.updateConfig(
+                  (c) => c.copyWith(rewardHardcore1: v.round()),
+                );
+                unawaited(economy.save());
+              },
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_reward_kill'),
+              helpKey: 'admin_help_hardcore_reward_kill',
+              value: config.rewardHardcoreKill.toDouble(),
+              min: 0,
+              max: 25,
+              divisions: 25,
+              display: '+${config.rewardHardcoreKill}',
+              defaultLabel: '+${ecoDefaults.rewardHardcoreKill}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => economy.updateConfig(
+                (c) => c.copyWith(rewardHardcoreKill: v.round()),
+              ),
+              onChangeEnd: (v) {
+                economy.updateConfig(
+                  (c) => c.copyWith(rewardHardcoreKill: v.round()),
+                );
+                unawaited(economy.save());
+              },
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_penalty_elim'),
+              helpKey: 'admin_help_hardcore_penalty_elim',
+              value: config.penaltyHardcore.toDouble(),
+              min: 0,
+              max: 50,
+              divisions: 50,
+              display: '−${config.penaltyHardcore}',
+              defaultLabel: '−${ecoDefaults.penaltyHardcore}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => economy.updateConfig(
+                (c) => c.copyWith(penaltyHardcore: v.round()),
+              ),
+              onChangeEnd: (v) {
+                economy.updateConfig(
+                  (c) => c.copyWith(penaltyHardcore: v.round()),
+                );
+                unawaited(economy.save());
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              lang.t('admin_hardcore_economy_save_note'),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.4),
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              lang.t('admin_hardcore_afk_section'),
+              style: TextStyle(
+                color: accent,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              lang.t('admin_hardcore_afk_hint'),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.45),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _SliderRow(
+              label: lang.t('admin_hardcore_afk_idle'),
+              helpKey: 'admin_help_hardcore_afk_idle',
+              value: idleConfig.hardcoreMatchIdleBeforeWarningSeconds
+                  .toDouble(),
+              min: 3,
+              max: 60,
+              divisions: 57,
+              display: '${idleConfig.hardcoreMatchIdleBeforeWarningSeconds}s',
+              defaultLabel:
+                  '${idleDefaults.hardcoreMatchIdleBeforeWarningSeconds}s',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => idle.updateConfig(
+                (c) => c.copyWith(
+                  hardcoreMatchIdleBeforeWarningSeconds: v.round(),
+                ),
+              ),
+              onChangeEnd: (v) {
+                idle.updateConfig(
+                  (c) => c.copyWith(
+                    hardcoreMatchIdleBeforeWarningSeconds: v.round(),
+                  ),
+                );
+                unawaited(idle.save());
+              },
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_afk_countdown'),
+              helpKey: 'admin_help_hardcore_afk_countdown',
+              value:
+                  idleConfig.hardcoreMatchWarningCountdownSeconds.toDouble(),
+              min: 1,
+              max: 15,
+              divisions: 14,
+              display: '${idleConfig.hardcoreMatchWarningCountdownSeconds}s',
+              defaultLabel:
+                  '${idleDefaults.hardcoreMatchWarningCountdownSeconds}s',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => idle.updateConfig(
+                (c) => c.copyWith(
+                  hardcoreMatchWarningCountdownSeconds: v.round(),
+                ),
+              ),
+              onChangeEnd: (v) {
+                idle.updateConfig(
+                  (c) => c.copyWith(
+                    hardcoreMatchWarningCountdownSeconds: v.round(),
+                  ),
+                );
+                unawaited(idle.save());
+              },
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_afk_drain'),
+              helpKey: 'admin_help_hardcore_afk_drain',
+              value: idleConfig.hardcoreMatchMassDrainPerSecond.toDouble(),
+              min: 1,
+              max: 40,
+              divisions: 39,
+              display: '−${idleConfig.hardcoreMatchMassDrainPerSecond}/s',
+              defaultLabel:
+                  '−${idleDefaults.hardcoreMatchMassDrainPerSecond}/s',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => idle.updateConfig(
+                (c) => c.copyWith(
+                  hardcoreMatchMassDrainPerSecond: v.round(),
+                ),
+              ),
+              onChangeEnd: (v) {
+                idle.updateConfig(
+                  (c) => c.copyWith(
+                    hardcoreMatchMassDrainPerSecond: v.round(),
+                  ),
+                );
+                unawaited(idle.save());
+              },
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_afk_late_radius'),
+              helpKey: 'admin_help_hardcore_afk_late_radius',
+              value: idleConfig.hardcoreAfkLateGameRadius.toDouble(),
+              min: 200,
+              max: 600,
+              divisions: 40,
+              display: '${idleConfig.hardcoreAfkLateGameRadius}',
+              defaultLabel: '${idleDefaults.hardcoreAfkLateGameRadius}',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => idle.updateConfig(
+                (c) => c.copyWith(hardcoreAfkLateGameRadius: v.round()),
+              ),
+              onChangeEnd: (v) {
+                idle.updateConfig(
+                  (c) => c.copyWith(hardcoreAfkLateGameRadius: v.round()),
+                );
+                unawaited(idle.save());
+              },
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_afk_idle_late'),
+              helpKey: 'admin_help_hardcore_afk_idle_late',
+              value: idleConfig.hardcoreMatchIdleBeforeWarningLateSeconds
+                  .toDouble(),
+              min: 3,
+              max: 60,
+              divisions: 57,
+              display:
+                  '${idleConfig.hardcoreMatchIdleBeforeWarningLateSeconds}s',
+              defaultLabel:
+                  '${idleDefaults.hardcoreMatchIdleBeforeWarningLateSeconds}s',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => idle.updateConfig(
+                (c) => c.copyWith(
+                  hardcoreMatchIdleBeforeWarningLateSeconds: v.round(),
+                ),
+              ),
+              onChangeEnd: (v) {
+                idle.updateConfig(
+                  (c) => c.copyWith(
+                    hardcoreMatchIdleBeforeWarningLateSeconds: v.round(),
+                  ),
+                );
+                unawaited(idle.save());
+              },
+            ),
+            _SliderRow(
+              label: lang.t('admin_hardcore_afk_drain_late'),
+              helpKey: 'admin_help_hardcore_afk_drain_late',
+              value: idleConfig.hardcoreMatchMassDrainLatePerSecond.toDouble(),
+              min: 1,
+              max: 40,
+              divisions: 39,
+              display: '−${idleConfig.hardcoreMatchMassDrainLatePerSecond}/s',
+              defaultLabel:
+                  '−${idleDefaults.hardcoreMatchMassDrainLatePerSecond}/s',
+              enabled: !busy,
+              accent: accent,
+              onChanged: (v) => idle.updateConfig(
+                (c) => c.copyWith(
+                  hardcoreMatchMassDrainLatePerSecond: v.round(),
+                ),
+              ),
+              onChangeEnd: (v) {
+                idle.updateConfig(
+                  (c) => c.copyWith(
+                    hardcoreMatchMassDrainLatePerSecond: v.round(),
+                  ),
+                );
+                unawaited(idle.save());
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              lang.t('admin_hardcore_afk_save_note'),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.4),
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HardcoreRuleCard extends StatelessWidget {
+  const _HardcoreRuleCard({
+    required this.accent,
+    required this.rows,
+  });
+
+  final Color accent;
+  final List<(String, String)> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: accent.withValues(alpha: 0.08),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        children: [
+          for (final row in rows)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      row.$1,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    row.$2,
+                    style: TextStyle(
+                      color: accent,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -1203,7 +2018,7 @@ class AdminUniverseDifficultyPresets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final service = RoomTuningService.instance;
     final tuning = service.tuningFor(roomType);
     final saving = service.saving;
@@ -1499,7 +2314,7 @@ class _HelpIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     return Tooltip(
       message: lang.t('admin_help_tooltip'),
       child: InkWell(
@@ -1540,7 +2355,7 @@ void _showAdminTuningHelp(
   required String helpKey,
   required Color accent,
 }) {
-  final lang = LanguageService.instance;
+  final lang = context.lang;
   final body = lang.t(helpKey);
 
   showModalBottomSheet<void>(
@@ -1912,7 +2727,7 @@ class _SliderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Column(

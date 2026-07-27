@@ -14,8 +14,11 @@ class SettingsService extends ChangeNotifier {
   static const _showOwnNameKey = 'quasar_show_own_name';
   static const _showOtherNamesKey = 'quasar_show_other_names';
   static const _showProfilePicturesKey = 'quasar_show_profile_pictures';
+  static const _showOwnSizeKey = 'quasar_show_own_size';
+  static const _showOtherSizesKey = 'quasar_show_other_sizes';
   static const _showKillFeedKey = 'quasar_show_kill_feed';
   static const _absorbBubblePresetKey = 'quasar_absorb_bubble_preset';
+  static const _lowPerformanceModeKey = 'quasar_low_performance_mode';
   static const defaultAbsorbBubblePresetId = 'absorbed';
 
   bool _musicEnabled = true;
@@ -24,8 +27,11 @@ class SettingsService extends ChangeNotifier {
   bool _showOwnName = true;
   bool _showOtherNames = true;
   bool _showProfilePictures = true;
+  bool _showOwnSize = true;
+  bool _showOtherSizes = false;
   bool _showKillFeed = true;
   String _absorbBubblePresetId = defaultAbsorbBubblePresetId;
+  bool _lowPerformanceMode = false;
   bool _loaded = false;
   SharedPreferences? _prefs;
 
@@ -41,10 +47,15 @@ class SettingsService extends ChangeNotifier {
   bool get showOwnName => _showOwnName;
   bool get showOtherNames => _showOtherNames;
   bool get showProfilePictures => _showProfilePictures;
+  bool get showOwnSize => _showOwnSize;
+  bool get showOtherSizes => _showOtherSizes;
   bool get showKillFeed => _showKillFeed;
 
   /// Selected absorb bubble preset id (`random` or a fixed line id).
   String get absorbBubblePresetId => _absorbBubblePresetId;
+
+  /// Fewer VFX, no GPU black-hole shader, 30 FPS cap in matches.
+  bool get lowPerformanceMode => _lowPerformanceMode;
 
   Future<void> init() async {
     if (_loaded) return;
@@ -55,10 +66,13 @@ class SettingsService extends ChangeNotifier {
     _showOwnName = prefs.getBool(_showOwnNameKey) ?? true;
     _showOtherNames = prefs.getBool(_showOtherNamesKey) ?? true;
     _showProfilePictures = prefs.getBool(_showProfilePicturesKey) ?? true;
+    _showOwnSize = prefs.getBool(_showOwnSizeKey) ?? true;
+    _showOtherSizes = prefs.getBool(_showOtherSizesKey) ?? false;
     _showKillFeed = prefs.getBool(_showKillFeedKey) ?? true;
     _absorbBubblePresetId = _sanitizeAbsorbPresetId(
       prefs.getString(_absorbBubblePresetKey),
     );
+    _lowPerformanceMode = prefs.getBool(_lowPerformanceModeKey) ?? false;
     _loaded = true;
     notifyListeners();
   }
@@ -114,6 +128,22 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setShowOwnSize(bool value) async {
+    if (_showOwnSize == value) return;
+    _showOwnSize = value;
+    final prefs = await _preferences;
+    await prefs.setBool(_showOwnSizeKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setShowOtherSizes(bool value) async {
+    if (_showOtherSizes == value) return;
+    _showOtherSizes = value;
+    final prefs = await _preferences;
+    await prefs.setBool(_showOtherSizesKey, value);
+    notifyListeners();
+  }
+
   Future<void> setShowKillFeed(bool value) async {
     if (_showKillFeed == value) return;
     _showKillFeed = value;
@@ -135,5 +165,13 @@ class SettingsService extends ChangeNotifier {
     final id = (raw ?? '').trim();
     if (absorbPresetById(id) != null) return id;
     return defaultAbsorbBubblePresetId;
+  }
+
+  Future<void> setLowPerformanceMode(bool value) async {
+    if (_lowPerformanceMode == value) return;
+    _lowPerformanceMode = value;
+    final prefs = await _preferences;
+    await prefs.setBool(_lowPerformanceModeKey, value);
+    notifyListeners();
   }
 }

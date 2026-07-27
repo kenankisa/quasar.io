@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/safe_debug.dart';
+
 /// Kurulum başına kalıcı cihaz kimliği (secure storage; web'de prefs).
 class DeviceIdService {
   DeviceIdService._();
@@ -11,8 +13,13 @@ class DeviceIdService {
 
   static const _prefKey = 'quasar_device_id';
 
+  /// Same as session storage: EncryptedSharedPreferences can hard-crash on
+  /// some OEM Android builds during first launch.
   static const _secure = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: false,
+      resetOnError: true,
+    ),
   );
 
   String? _cached;
@@ -33,24 +40,37 @@ class DeviceIdService {
       return generated;
     }
 
-    final fromSecure = await _secure.read(key: _prefKey);
-    if (fromSecure != null && fromSecure.isNotEmpty) {
-      _cached = fromSecure;
-      return fromSecure;
+    try {
+      final fromSecure = await _secure.read(key: _prefKey);
+      if (fromSecure != null && fromSecure.isNotEmpty) {
+        _cached = fromSecure;
+        return fromSecure;
+      }
+    } catch (e, st) {
+      safeDebugPrint('DeviceIdService secure read: $e\n$st');
     }
 
-    // Eski SharedPreferences kaydını taşı.
+    // Eski SharedPreferences kaydını taşı / fallback.
     final prefs = await SharedPreferences.getInstance();
     final legacy = prefs.getString(_prefKey);
     if (legacy != null && legacy.isNotEmpty) {
-      await _secure.write(key: _prefKey, value: legacy);
-      await prefs.remove(_prefKey);
+      try {
+        await _secure.write(key: _prefKey, value: legacy);
+        await prefs.remove(_prefKey);
+      } catch (_) {
+        // Keep prefs copy if secure write fails.
+      }
       _cached = legacy;
       return legacy;
     }
 
     final generated = _generateId();
-    await _secure.write(key: _prefKey, value: generated);
+    try {
+      await _secure.write(key: _prefKey, value: generated);
+    } catch (e, st) {
+      safeDebugPrint('DeviceIdService secure write: $e\n$st');
+      await prefs.setString(_prefKey, generated);
+    }
     _cached = generated;
     return generated;
   }

@@ -11,7 +11,10 @@ import '../orbit_game.dart';
 import '../../services/settings_service.dart';
 import 'black_hole_partner.dart';
 import 'cosmic_event_manager.dart';
+import 'cosmic_mine.dart';
+import 'cosmic_spawn_manager.dart';
 import 'player.dart';
+import 'shield_powerup.dart';
 import '../systems/pickup_collision_system.dart';
 import '../utils/black_hole_renderer.dart';
 import '../utils/competitor_hole_renderer.dart';
@@ -508,20 +511,11 @@ class BotPlayer extends PositionComponent
   /// Largest alive hole other than this bot (real players included).
   BlackHolePartner? _victoryContender(OrbitGame game) {
     BlackHolePartner? top;
-
-    void consider(BlackHolePartner hole) {
-      if (hole.isEliminated || identical(hole, this)) return;
-      if (top == null || hole.holeRadius > top!.holeRadius) {
-        top = hole;
+    for (final hole in game.holeIndex.entries) {
+      if (identical(hole.partner, this)) continue;
+      if (top == null || hole.radius > top.holeRadius) {
+        top = hole.partner;
       }
-    }
-
-    consider(game.player);
-    for (final enemy in game.enemyPlayers) {
-      consider(enemy);
-    }
-    for (final bot in game.botPopulation.bots) {
-      consider(bot);
     }
     return top;
   }
@@ -638,22 +632,16 @@ class BotPlayer extends PositionComponent
 
   List<BlackHolePartner> _nearbyThreats(OrbitGame game) {
     final threshold = radius * difficulty.threatSizeRatio;
+    final queryRadius = radius * 12;
     final threats = <BlackHolePartner>[];
 
-    if (game.player.holeRadius > threshold && !game.player.isEliminated) {
-      threats.add(game.player);
-    }
-    for (final enemy in game.enemyPlayers) {
-      if (!enemy.isEliminated && enemy.holeRadius > threshold) {
-        threats.add(enemy);
+    game.holeIndex.forEachNear(position, queryRadius, (hole) {
+      if (identical(hole.partner, this)) return;
+      if (hole.radius > threshold) {
+        threats.add(hole.partner);
       }
-    }
-    for (final bot in game.botPopulation.bots) {
-      if (bot == this || bot.isEliminated) continue;
-      if (bot.holeRadius > threshold) {
-        threats.add(bot);
-      }
-    }
+    });
+
     threats.sort(
       (a, b) => position
           .distanceTo(a.position)
@@ -700,12 +688,10 @@ class BotPlayer extends PositionComponent
     }
 
     consider(game.player);
-    for (final enemy in game.enemyPlayers) {
-      if (!enemy.isEliminated) consider(enemy);
-    }
-    for (final bot in game.botPopulation.bots) {
-      if (bot != this) consider(bot);
-    }
+    game.holeIndex.forEachNear(position, maxDist, (hole) {
+      if (identical(hole.partner, this)) return;
+      consider(hole.partner);
+    });
 
     if (best == null) return null;
 
@@ -741,20 +727,11 @@ class BotPlayer extends PositionComponent
       }
     }
 
-    for (final asteroid in game.spawnManager.asteroids) {
-      if (!asteroid.active || asteroid.isFragment) continue;
-      consider(asteroid.position, asteroid.growthValue);
-    }
-
-    for (final planet in game.spawnManager.planets) {
-      if (!planet.active) continue;
-      consider(planet.position, planet.growthValue);
-    }
-
-    for (final fragment in game.spawnManager.quasarFragments) {
-      if (!fragment.active) continue;
-      consider(fragment.position, fragment.growthValue);
-    }
+    game.spawnManager.forEachFoodNear(
+      position,
+      maxDist,
+      (foodPos, growthValue) => consider(foodPos, growthValue),
+    );
 
     for (final planet in game.eventManager.eventPlanets) {
       if (!planet.active) continue;
@@ -773,21 +750,35 @@ class BotPlayer extends PositionComponent
   }
 
   Vector2? _nearestShield(OrbitGame game) {
-    for (final shield in game.spawnManager.shields) {
-      if (!shield.active) continue;
+    Vector2? nearest;
+    var nearestDist = radius * 8;
+    game.spawnManager.forEachPickupNear(position, radius, (ref) {
+      if (ref.kind != SpawnPickupKind.shield) return;
+      final shield = ref.entity as ShieldPowerUp;
+      if (!shield.active) return;
       final dist = position.distanceTo(shield.position);
-      if (dist < radius * 8) return shield.position;
-    }
-    return null;
+      if (dist < nearestDist) {
+        nearest = shield.position;
+        nearestDist = dist;
+      }
+    });
+    return nearest;
   }
 
   Vector2? _nearestMine(OrbitGame game) {
-    for (final mine in game.spawnManager.mines) {
-      if (!mine.active) continue;
+    Vector2? nearest;
+    var nearestDist = 280.0;
+    game.spawnManager.forEachPickupNear(position, 280, (ref) {
+      if (ref.kind != SpawnPickupKind.mine) return;
+      final mine = ref.entity as CosmicMine;
+      if (!mine.active) return;
       final dist = position.distanceTo(mine.position);
-      if (dist < 280) return mine.position;
-    }
-    return null;
+      if (dist < nearestDist) {
+        nearest = mine.position;
+        nearestDist = dist;
+      }
+    });
+    return nearest;
   }
 
   Vector2? _nearestMeteorDust(OrbitGame game) {

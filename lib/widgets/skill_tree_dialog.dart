@@ -1,7 +1,9 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
+import '../utils/lang_rebuild.dart';
 import '../game/config/skill_tree_config.dart';
 import '../services/lang_service.dart';
 import '../services/profile_service.dart';
@@ -20,7 +22,7 @@ class SkillTreeDialog extends StatefulWidget {
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 280),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return SkillTreeDialog(profile: profile);
+        return LangRebuild(child: SkillTreeDialog(profile: profile));
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curve = CurvedAnimation(
@@ -138,7 +140,7 @@ class _SkillTreeDialogState extends State<SkillTreeDialog>
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final r = ResponsiveLayout.of(context);
     final media = MediaQuery.sizeOf(context);
     final nextSp = AbilityLoadout.diamondsToNextSp(_profile.peakDiamonds);
@@ -381,7 +383,7 @@ class _BranchPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final nodes = AbilityLoadout.nodesFor(branch);
 
     return ListView.separated(

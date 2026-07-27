@@ -1,9 +1,17 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
+import '../utils/lang_rebuild.dart';
+
+import '../game/config/skill_tree_config.dart';
+import '../game/room_type.dart';
+import '../services/app_economy_config_service.dart';
 import '../services/app_rank_config_service.dart';
 import '../services/lang_service.dart';
+import '../services/profile_service.dart';
+import '../services/room_tuning_service.dart';
 
 class HowToPlayDialog extends StatelessWidget {
   const HowToPlayDialog({super.key});
@@ -16,7 +24,7 @@ class HowToPlayDialog extends StatelessWidget {
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return const HowToPlayDialog();
+        return const LangRebuild(child: HowToPlayDialog());
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curve = CurvedAnimation(
@@ -34,6 +42,45 @@ class HowToPlayDialog extends StatelessWidget {
     );
   }
 
+  String _victoryDesc(LanguageService lang) {
+    final econ = AppEconomyConfigService.instance.config;
+    final normalR = RoomTuningService.instance
+        .tuningFor(RoomType.normal)
+        .victoryRadius
+        .round();
+    final uniqueR = RoomTuningService.instance
+        .tuningFor(RoomType.unique)
+        .victoryRadius
+        .round();
+    return lang
+        .t('how_to_play_victory_desc')
+        .replaceAll('{normalVictory}', '$normalR')
+        .replaceAll('{uniqueVictory}', '$uniqueR')
+        .replaceAll('{normal1}', '${econ.rewardNormal1}')
+        .replaceAll('{normal2}', '${econ.rewardNormal2}')
+        .replaceAll('{normal3}', '${econ.rewardNormal3}')
+        .replaceAll('{normalPen}', '${econ.penaltyNormal}')
+        .replaceAll('{elite1}', '${econ.rewardElite1}')
+        .replaceAll('{elite2}', '${econ.rewardElite2}')
+        .replaceAll('{elite3}', '${econ.rewardElite3}')
+        .replaceAll('{elitePen}', '${econ.penaltyElite}')
+        .replaceAll('{unique1}', '${econ.rewardUnique1}')
+        .replaceAll('{unique2}', '${econ.rewardUnique2}')
+        .replaceAll('{unique3}', '${econ.rewardUnique3}')
+        .replaceAll('{uniquePen}', '${econ.penaltyUnique}')
+        .replaceAll('{startDiamonds}', '${econ.unlockNormal}');
+  }
+
+  String _currenciesDesc(LanguageService lang) {
+    final econ = AppEconomyConfigService.instance.config;
+    return lang
+        .t('how_to_play_currencies_desc')
+        .replaceAll('{startDiamonds}', '${econ.unlockNormal}')
+        .replaceAll('{unlockNormal}', '${econ.unlockNormal}')
+        .replaceAll('{unlockElite}', '${econ.unlockElite}')
+        .replaceAll('{unlockUnique}', '${econ.unlockUnique}');
+  }
+
   String _rankSystemDesc(LanguageService lang) {
     final cfg = AppRankConfigService.instance.config;
     return lang
@@ -41,174 +88,242 @@ class HowToPlayDialog extends StatelessWidget {
         .replaceAll('{normal}', '${cfg.winPointsNormal}')
         .replaceAll('{elite}', '${cfg.winPointsElite}')
         .replaceAll('{unique}', '${cfg.winPointsUnique}')
+        .replaceAll('{hardcore}', '${cfg.winPointsHardcore}')
         .replaceAll('{stellar}', '${cfg.minPointsStellar}')
         .replaceAll('{nova}', '${cfg.minPointsNova}')
         .replaceAll('{quasar}', '${cfg.minPointsQuasar}')
         .replaceAll('{singularity}', '${cfg.minPointsSingularity}');
   }
 
+  String _hardcoreDesc(LanguageService lang) {
+    final econ = AppEconomyConfigService.instance.config;
+    final rank = AppRankConfigService.instance.config;
+    return lang
+        .t('how_to_play_hardcore_desc')
+        .replaceAll('{trophies}', '${PlayerProfile.hardcoreTrophyRequirement}')
+        .replaceAll('{victory}', '600')
+        .replaceAll('{minAlive}', '${econ.hardcoreArenaMinAlive}')
+        .replaceAll('{cap}', '450')
+        .replaceAll('{winDiamonds}', '${econ.rewardHardcore1}')
+        .replaceAll('{kill}', '${econ.rewardHardcoreKill}')
+        .replaceAll('{elim}', '${econ.penaltyHardcore}')
+        .replaceAll('{rank}', '${rank.winPointsHardcore}');
+  }
+
+  String _abilityShieldDesc(LanguageService lang) {
+    return lang
+        .t('how_to_play_shield_ability_desc')
+        .replaceAll(
+          '{cd}',
+          '${AbilityLoadout.baseAbilityShieldCooldown.round()}',
+        )
+        .replaceAll(
+          '{duration}',
+          '${AbilityLoadout.baseAbilityShieldDuration.round()}',
+        );
+  }
+
+  String _teleportShieldDesc(LanguageService lang) {
+    return lang
+        .t('how_to_play_shield_teleport_desc')
+        .replaceAll(
+          '{cd}',
+          '${AbilityLoadout.baseTeleportCooldown.round()}',
+        )
+        .replaceAll(
+          '{duration}',
+          '${AbilityLoadout.baseTeleportBriefShield.round()}',
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final size = MediaQuery.sizeOf(context);
 
-    final sections = [
-      _HowToSection(
-        icon: Icons.touch_app,
-        titleKey: 'how_to_play_move_title',
-        descKey: 'how_to_play_move_desc',
-        color: const Color(0xFF00F0FF),
-      ),
-      _HowToSection(
-        icon: Icons.all_inclusive,
-        titleKey: 'how_to_play_absorb_title',
-        descKey: 'how_to_play_absorb_desc',
-        color: const Color(0xFFFF00AA),
-      ),
-      _HowToSection(
-        icon: Icons.rocket_launch,
-        titleKey: 'how_to_play_boost_title',
-        descKey: 'how_to_play_boost_desc',
-        color: const Color(0xFFFF6600),
-      ),
-      _HowToSection(
-        icon: Icons.link,
-        titleKey: 'how_to_play_link_title',
-        descKey: 'how_to_play_link_desc',
-        color: const Color(0xFF7B2FFF),
-      ),
-      _HowToSection(
-        icon: Icons.shield_outlined,
-        titleKey: 'how_to_play_shield_title',
-        descKey: 'how_to_play_shield_desc',
-        color: const Color(0xFF44FF88),
-      ),
-      _HowToSection(
-        icon: Icons.emoji_events,
-        titleKey: 'how_to_play_victory_title',
-        descKey: 'how_to_play_victory_desc',
-        color: const Color(0xFFFFAA00),
-      ),
-      _HowToSection(
-        icon: Icons.military_tech_outlined,
-        titleKey: 'how_to_play_ranks_title',
-        descKey: 'how_to_play_ranks_desc',
-        color: const Color(0xFFFFD54F),
-        descriptionOverride: _rankSystemDesc(lang),
-      ),
-      _HowToSection(
-        icon: Icons.diamond_outlined,
-        titleKey: 'how_to_play_currencies_title',
-        descKey: 'how_to_play_currencies_desc',
-        color: const Color(0xFF00F0FF),
-      ),
-      _HowToSection(
-        icon: Icons.bolt,
-        titleKey: 'how_to_play_events_title',
-        descKey: 'how_to_play_events_desc',
-        color: const Color(0xFFFF0044),
-      ),
-    ];
-
-    return Center(
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: size.width * 0.9,
-          height: size.height * 0.78,
-          constraints: const BoxConstraints(maxWidth: 440, maxHeight: 680),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF12122A).withValues(alpha: 0.95),
-                const Color(0xFF0A0A1A).withValues(alpha: 0.98),
-              ],
-            ),
-            border: Border.all(
-              color: const Color(0xFF00F0FF).withValues(alpha: 0.35),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF00F0FF).withValues(alpha: 0.12),
-                blurRadius: 30,
-              ),
-            ],
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        AppEconomyConfigService.instance,
+        AppRankConfigService.instance,
+        RoomTuningService.instance,
+      ]),
+      builder: (context, _) {
+        final sections = [
+          _HowToSection(
+            icon: Icons.touch_app,
+            titleKey: 'how_to_play_move_title',
+            descKey: 'how_to_play_move_desc',
+            color: const Color(0xFF00F0FF),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.help_outline,
-                          color: Color(0xFF00F0FF),
-                          size: 26,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            lang.t('how_to_play_title'),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white54),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1, color: Colors.white12),
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(20),
-                      itemCount: sections.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 14),
-                      itemBuilder: (context, index) {
-                        final section = sections[index];
-                        return _HowToCard(
-                          icon: section.icon,
-                          title: lang.t(section.titleKey),
-                          description: section.descriptionOverride ??
-                              lang.t(section.descKey),
-                          accentColor: section.color,
-                        );
-                      },
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF00F0FF),
-                          foregroundColor: const Color(0xFF0A0A1A),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: Text(lang.t('how_to_play_close')),
-                      ),
-                    ),
+          _HowToSection(
+            icon: Icons.all_inclusive,
+            titleKey: 'how_to_play_absorb_title',
+            descKey: 'how_to_play_absorb_desc',
+            color: const Color(0xFFFF00AA),
+          ),
+          _HowToSection(
+            icon: Icons.rocket_launch,
+            titleKey: 'how_to_play_boost_title',
+            descKey: 'how_to_play_boost_desc',
+            color: const Color(0xFFFF6600),
+          ),
+          _HowToSection(
+            icon: Icons.shield_outlined,
+            titleKey: 'how_to_play_shield_pickup_title',
+            descKey: 'how_to_play_shield_pickup_desc',
+            color: const Color(0xFF44FF88),
+          ),
+          _HowToSection(
+            icon: Icons.security,
+            titleKey: 'how_to_play_shield_ability_title',
+            descKey: 'how_to_play_shield_ability_desc',
+            color: const Color(0xFF66CCFF),
+            descriptionOverride: _abilityShieldDesc(lang),
+          ),
+          _HowToSection(
+            icon: Icons.bolt_outlined,
+            titleKey: 'how_to_play_shield_teleport_title',
+            descKey: 'how_to_play_shield_teleport_desc',
+            color: const Color(0xFFAA88FF),
+            descriptionOverride: _teleportShieldDesc(lang),
+          ),
+          _HowToSection(
+            icon: Icons.emoji_events,
+            titleKey: 'how_to_play_victory_title',
+            descKey: 'how_to_play_victory_desc',
+            color: const Color(0xFFFFAA00),
+            descriptionOverride: _victoryDesc(lang),
+          ),
+          _HowToSection(
+            icon: Icons.military_tech_outlined,
+            titleKey: 'how_to_play_ranks_title',
+            descKey: 'how_to_play_ranks_desc',
+            color: const Color(0xFFFFD54F),
+            descriptionOverride: _rankSystemDesc(lang),
+          ),
+          _HowToSection(
+            icon: Icons.local_fire_department,
+            titleKey: 'how_to_play_hardcore_title',
+            descKey: 'how_to_play_hardcore_desc',
+            color: const Color(0xFFFF4422),
+            descriptionOverride: _hardcoreDesc(lang),
+          ),
+          _HowToSection(
+            icon: Icons.diamond_outlined,
+            titleKey: 'how_to_play_currencies_title',
+            descKey: 'how_to_play_currencies_desc',
+            color: const Color(0xFF00F0FF),
+            descriptionOverride: _currenciesDesc(lang),
+          ),
+          _HowToSection(
+            icon: Icons.bolt,
+            titleKey: 'how_to_play_events_title',
+            descKey: 'how_to_play_events_desc',
+            color: const Color(0xFFFF0044),
+          ),
+        ];
+
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: size.width * 0.9,
+              height: size.height * 0.78,
+              constraints: const BoxConstraints(maxWidth: 440, maxHeight: 680),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFF12122A).withValues(alpha: 0.95),
+                    const Color(0xFF0A0A1A).withValues(alpha: 0.98),
+                  ],
+                ),
+                border: Border.all(
+                  color: const Color(0xFF00F0FF).withValues(alpha: 0.35),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00F0FF).withValues(alpha: 0.12),
+                    blurRadius: 30,
                   ),
                 ],
               ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.help_outline,
+                              color: Color(0xFF00F0FF),
+                              size: 26,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                lang.t('how_to_play_title'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.white54),
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1, color: Colors.white12),
+                      Expanded(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.all(20),
+                          itemCount: sections.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 14),
+                          itemBuilder: (context, index) {
+                            final section = sections[index];
+                            return _HowToCard(
+                              icon: section.icon,
+                              title: lang.t(section.titleKey),
+                              description: section.descriptionOverride ??
+                                  lang.t(section.descKey),
+                              accentColor: section.color,
+                            );
+                          },
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF00F0FF),
+                              foregroundColor: const Color(0xFF0A0A1A),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: Text(lang.t('how_to_play_close')),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

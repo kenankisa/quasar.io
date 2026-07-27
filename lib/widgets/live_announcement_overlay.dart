@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../game/models/live_announcement.dart';
+import '../services/lang_service.dart';
 import '../services/live_announcement_service.dart';
+import '../utils/player_name.dart';
 
-/// Maç/lobi kontrollerini engellemeyen üst duyuru balonu.
+/// Maç/lobi kontrollerini engellemeyen üst duyuru balonları.
+/// Aynı anda en fazla [LiveAnnouncementService.maxVisible] (fazlası sırada).
 class LiveAnnouncementOverlay extends StatelessWidget {
   const LiveAnnouncementOverlay({super.key, required this.child});
 
@@ -12,53 +15,43 @@ class LiveAnnouncementOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: LiveAnnouncementService.instance,
+      listenable: Listenable.merge([
+        LiveAnnouncementService.instance,
+        LanguageService.instance,
+      ]),
       builder: (context, _) {
-        final ann = LiveAnnouncementService.instance.current;
-        final show = ann != null && !ann.isExpired;
+        final items = LiveAnnouncementService.instance.visible;
 
         return Stack(
           fit: StackFit.expand,
           children: [
             child,
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 320),
-                      reverseDuration: const Duration(milliseconds: 220),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (child, animation) {
-                        final slide = Tween<Offset>(
-                          begin: const Offset(0, -0.35),
-                          end: Offset.zero,
-                        ).animate(animation);
-                        return FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(
-                            position: slide,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: show
-                          ? _AnnouncementBubble(
-                              key: ValueKey(ann.id),
-                              announcement: ann,
-                            )
-                          : const SizedBox.shrink(key: ValueKey('empty')),
+            if (items.isNotEmpty)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (var i = 0; i < items.length; i++) ...[
+                            if (i > 0) const SizedBox(height: 6),
+                            _AnnouncementBubble(
+                              key: ValueKey(items[i].id),
+                              announcement: items[i],
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         );
       },
@@ -77,7 +70,8 @@ class _AnnouncementBubble extends StatefulWidget {
 
 class _AnnouncementBubbleState extends State<_AnnouncementBubble>
     with TickerProviderStateMixin {
-  static const _accent = Color(0xFFFFC857);
+  static const _adminAccent = Color(0xFFFFC857);
+  static const _hardcoreAccent = Color(0xFFFF5A6A);
 
   late final AnimationController _enter;
   late final AnimationController _progress;
@@ -129,9 +123,21 @@ class _AnnouncementBubbleState extends State<_AnnouncementBubble>
     super.dispose();
   }
 
+  String _resolvedBody() {
+    final winner = widget.announcement.hardcoreWinnerName;
+    if (winner != null) {
+      return LanguageService.instance
+          .t('live_announce_hardcore_win')
+          .replaceAll('{name}', clampPlayerName(winner));
+    }
+    return widget.announcement.body;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final body = widget.announcement.body;
+    final body = _resolvedBody();
+    final isHc = widget.announcement.isHardcoreWin;
+    final accent = isHc ? _hardcoreAccent : _adminAccent;
 
     return Align(
       alignment: Alignment.topCenter,
@@ -158,11 +164,11 @@ class _AnnouncementBubbleState extends State<_AnnouncementBubble>
                       ],
                     ),
                     border: Border.all(
-                      color: _accent.withValues(alpha: 0.42 + pulse * 0.2),
+                      color: accent.withValues(alpha: 0.42 + pulse * 0.2),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: _accent.withValues(alpha: 0.12 + pulse * 0.12),
+                        color: accent.withValues(alpha: 0.12 + pulse * 0.12),
                         blurRadius: 18,
                         offset: const Offset(0, 6),
                       ),
@@ -185,13 +191,13 @@ class _AnnouncementBubbleState extends State<_AnnouncementBubble>
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: _accent.withValues(alpha: 0.12),
+                                  color: accent.withValues(alpha: 0.12),
                                   border: Border.all(
-                                    color: _accent.withValues(alpha: 0.35),
+                                    color: accent.withValues(alpha: 0.35),
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: _accent.withValues(
+                                      color: accent.withValues(
                                         alpha: 0.15 + pulse * 0.2,
                                       ),
                                       blurRadius: 10,
@@ -199,8 +205,10 @@ class _AnnouncementBubbleState extends State<_AnnouncementBubble>
                                   ],
                                 ),
                                 child: Icon(
-                                  Icons.campaign_rounded,
-                                  color: _accent.withValues(
+                                  isHc
+                                      ? Icons.workspace_premium_rounded
+                                      : Icons.campaign_rounded,
+                                  color: accent.withValues(
                                     alpha: 0.75 + pulse * 0.25,
                                   ),
                                   size: 18,
@@ -210,6 +218,8 @@ class _AnnouncementBubbleState extends State<_AnnouncementBubble>
                               Expanded(
                                 child: Text(
                                   body,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 13.5,
@@ -222,7 +232,6 @@ class _AnnouncementBubbleState extends State<_AnnouncementBubble>
                             ],
                           ),
                         ),
-                        // Kalan süre — kartın alt kenarı (yazı alt çizgisi gibi durmasın).
                         SizedBox(
                           height: 3,
                           child: LinearProgressIndicator(
@@ -230,7 +239,7 @@ class _AnnouncementBubbleState extends State<_AnnouncementBubble>
                             backgroundColor:
                                 Colors.white.withValues(alpha: 0.06),
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              _accent.withValues(alpha: 0.7),
+                              accent.withValues(alpha: 0.7),
                             ),
                           ),
                         ),

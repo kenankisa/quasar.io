@@ -128,7 +128,7 @@ abstract final class BlackHoleShaderRenderer {
     if (key != null && _planned) return lodForKey(key) > 0;
     if (isLocal) return true;
     if (CanvasEffects.isNativeMobile) return gameRadius >= 16;
-    if (CanvasEffects.mobileLiteMode) return gameRadius >= 20;
+    if (CanvasEffects.economyMode) return gameRadius >= 20;
     return gameRadius >= 14;
   }
 

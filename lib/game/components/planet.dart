@@ -11,8 +11,9 @@ import '../utils/consumable_tidal_spin.dart';
 import '../utils/cosmic_body_renderer.dart';
 import '../utils/gravity_visual.dart';
 import '../utils/viewport_cull.dart';
+import 'gravity_matter.dart';
 
-class Planet extends PositionComponent {
+class Planet extends PositionComponent implements GravityMatter {
   Planet({
     required Vector2 position,
     required this.colorIndex,
@@ -29,12 +30,15 @@ class Planet extends PositionComponent {
        );
 
   final int colorIndex;
+  @override
   final double collisionRadius;
   final double growthValue;
+  @override
   final Vector2 velocity;
   final bool isEventReward;
   final PlanetKind _kind;
 
+  @override
   bool active = true;
   double _spin = 0;
 
@@ -164,7 +168,7 @@ class Planet extends PositionComponent {
 
   void _drawBands(Canvas canvas, double r) {
     final bandPaint = Paint()..style = PaintingStyle.stroke;
-    final count = CanvasEffects.mobileLiteMode ? 3 : 5;
+    final count = CanvasEffects.economyMode ? 3 : 5;
     for (var i = 0; i < count; i++) {
       final t = (i + 1) / (count + 1);
       final y = -r + r * 2 * t;
@@ -256,7 +260,7 @@ class Planet extends PositionComponent {
         ..color = Color.lerp(ringColor, Colors.white, 0.35)!
             .withValues(alpha: alpha),
     );
-    if (!CanvasEffects.mobileLiteMode) {
+    if (!CanvasEffects.economyMode) {
       canvas.drawCircle(
         Offset.zero,
         r * 1.08,

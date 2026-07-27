@@ -237,7 +237,7 @@ class AdminStatsService extends ChangeNotifier {
         if (!_isActiveInstance(row, staleBefore)) continue;
 
         final players = (row['real_player_count'] as num?)?.toInt() ?? 0;
-        final bots = RoomMatchmaking.botCountFor(players);
+        final bots = RoomMatchmaking.botCountFor(players, roomType: roomType);
         final instanceNumber = (row['instance_number'] as num?)?.toInt() ?? 0;
         final leaderRadius = (row['leader_radius'] as num?)?.toInt() ?? 0;
 
@@ -382,8 +382,11 @@ class AdminStatsService extends ChangeNotifier {
     final players = (row['real_player_count'] as num?)?.toInt() ?? 0;
     if (players <= 0) return false;
 
+    final roomType = _parseRoomType(row['room_type'] as String?);
     final leaderRadius = (row['leader_radius'] as num?)?.toInt() ?? 0;
-    if (leaderRadius >= RoomMatchmaking.leaderRadiusJoinThreshold) {
+    // Hardcore stays open past the join threshold — keep counting seats.
+    if (roomType != RoomType.hardcore &&
+        leaderRadius >= RoomMatchmaking.leaderRadiusJoinThreshold) {
       return false;
     }
 
@@ -420,7 +423,6 @@ class _TierBuilder {
   }
 
   AdminUniverseTierStats build() {
-    final difficulty = BotDifficulty.forRoom(roomType);
     instances.sort((a, b) => a.instanceNumber.compareTo(b.instanceNumber));
     return AdminUniverseTierStats(
       roomType: roomType,
@@ -428,8 +430,10 @@ class _TierBuilder {
           AdminUniverseTierStats.difficultyLabelKeyFor(roomType),
       activeUniverses: activeUniverses,
       players: players,
-      bots: bots,
-      huntPriority: difficulty.huntPriority,
+      bots: roomType.allowsBots ? bots : 0,
+      huntPriority: roomType.allowsBots
+          ? BotDifficulty.forRoom(roomType).huntPriority
+          : 0,
       instances: List.unmodifiable(instances),
     );
   }

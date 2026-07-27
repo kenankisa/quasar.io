@@ -1,6 +1,9 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
+
+import '../utils/lang_rebuild.dart';
 
 import '../services/lang_service.dart';
 import '../services/profile_service.dart';
@@ -17,7 +20,7 @@ class GlobalRankDialog extends StatefulWidget {
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return const GlobalRankDialog();
+        return const LangRebuild(child: GlobalRankDialog());
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curve = CurvedAnimation(
@@ -92,11 +95,13 @@ class _GlobalRankDialogState extends State<GlobalRankDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final size = MediaQuery.sizeOf(context);
-    final accent = _sort == GlobalLeaderboardSort.rank
-        ? const Color(0xFFFFD54F)
-        : const Color(0xFF00F0FF);
+    final accent = switch (_sort) {
+      GlobalLeaderboardSort.rank => const Color(0xFFFFD54F),
+      GlobalLeaderboardSort.wealth => const Color(0xFF00F0FF),
+      GlobalLeaderboardSort.hardcore => const Color(0xFFFF3355),
+    };
 
     return Center(
       child: Material(
@@ -167,11 +172,14 @@ class _GlobalRankDialogState extends State<GlobalRankDialog> {
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 220),
                       child: Text(
-                        lang.t(
-                          _sort == GlobalLeaderboardSort.rank
-                              ? 'global_rank_blurb_rank'
-                              : 'global_rank_blurb_wealth',
-                        ),
+                        lang.t(switch (_sort) {
+                          GlobalLeaderboardSort.rank =>
+                            'global_rank_blurb_rank',
+                          GlobalLeaderboardSort.wealth =>
+                            'global_rank_blurb_wealth',
+                          GlobalLeaderboardSort.hardcore =>
+                            'global_rank_blurb_hardcore',
+                        }),
                         key: ValueKey(_sort),
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.55),
@@ -269,9 +277,11 @@ class _GlobalRankDialogState extends State<GlobalRankDialog> {
                 child: Text(
                   lang.t('global_rank_your_position'),
                   style: TextStyle(
-                    color: (_sort == GlobalLeaderboardSort.rank
-                            ? const Color(0xFFFFD54F)
-                            : const Color(0xFF00F0FF))
+                    color: (switch (_sort) {
+                      GlobalLeaderboardSort.rank => const Color(0xFFFFD54F),
+                      GlobalLeaderboardSort.wealth => const Color(0xFF00F0FF),
+                      GlobalLeaderboardSort.hardcore => const Color(0xFFFF3355),
+                    })
                         .withValues(alpha: 0.9),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -347,6 +357,16 @@ class _SortTabs extends StatelessWidget {
               selected: sort == GlobalLeaderboardSort.wealth,
               activeColor: const Color(0xFF00F0FF),
               onTap: () => onSelect(GlobalLeaderboardSort.wealth),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _TabChip(
+              label: lang.t('global_rank_tab_hardcore'),
+              icon: Icons.whatshot,
+              selected: sort == GlobalLeaderboardSort.hardcore,
+              activeColor: const Color(0xFFFF3355),
+              onTap: () => onSelect(GlobalLeaderboardSort.hardcore),
             ),
           ),
         ],
@@ -442,10 +462,14 @@ class _HeaderRow extends StatelessWidget {
     );
 
     // Secondary mid, primary sort key always on the right.
-    final midLabel = lang.t('global_rank_wins');
-    final rightLabel = sort == GlobalLeaderboardSort.rank
-        ? lang.t('global_rank_points')
-        : lang.t('lobby_diamonds');
+    final midLabel = sort == GlobalLeaderboardSort.hardcore
+        ? lang.t('lobby_diamonds')
+        : lang.t('global_rank_wins');
+    final rightLabel = switch (sort) {
+      GlobalLeaderboardSort.rank => lang.t('global_rank_points'),
+      GlobalLeaderboardSort.wealth => lang.t('lobby_diamonds'),
+      GlobalLeaderboardSort.hardcore => lang.t('global_rank_hardcore_points'),
+    };
 
     return Row(
       children: [
@@ -477,14 +501,17 @@ class _RankRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final isLocal = entry.isLocal;
     final highlight = isLocal || emphasized;
     const diamondColor = Color(0xFF00F0FF);
     const winColor = Color(0xFFFFD54F);
-    final accent = sort == GlobalLeaderboardSort.rank
-        ? winColor
-        : diamondColor;
+    const hardcoreColor = Color(0xFFFF3355);
+    final accent = switch (sort) {
+      GlobalLeaderboardSort.rank => winColor,
+      GlobalLeaderboardSort.wealth => diamondColor,
+      GlobalLeaderboardSort.hardcore => hardcoreColor,
+    };
 
     final rankStyle = TextStyle(
       color: _medalColor(entry.rank) ?? (highlight ? accent : Colors.white70),
@@ -502,16 +529,27 @@ class _RankRow extends StatelessWidget {
         ? '${lang.t('leaderboard_you')} · ${entry.username}'
         : entry.username;
 
-    // Mid = secondary (wins). Right = primary sort key.
-    final midIcon = Icons.emoji_events_outlined;
-    const midColor = Color(0xFFFFB74D);
-    final rightValue =
-        sort == GlobalLeaderboardSort.rank ? entry.rankPoints : entry.diamonds;
-    final rightIcon = sort == GlobalLeaderboardSort.rank
-        ? Icons.star_rounded
-        : Icons.diamond_outlined;
-    final rightColor =
-        sort == GlobalLeaderboardSort.rank ? winColor : diamondColor;
+    // Mid = secondary. Right = primary sort key.
+    final midIcon = sort == GlobalLeaderboardSort.hardcore
+        ? Icons.diamond_outlined
+        : Icons.emoji_events_outlined;
+    final midColor = sort == GlobalLeaderboardSort.hardcore
+        ? diamondColor
+        : const Color(0xFFFFB74D);
+    final midValue = sort == GlobalLeaderboardSort.hardcore
+        ? entry.diamonds
+        : entry.gamesWon;
+    final rightValue = switch (sort) {
+      GlobalLeaderboardSort.rank => entry.rankPoints,
+      GlobalLeaderboardSort.wealth => entry.diamonds,
+      GlobalLeaderboardSort.hardcore => entry.hardcorePoints,
+    };
+    final rightIcon = switch (sort) {
+      GlobalLeaderboardSort.rank => Icons.star_rounded,
+      GlobalLeaderboardSort.wealth => Icons.diamond_outlined,
+      GlobalLeaderboardSort.hardcore => Icons.whatshot,
+    };
+    final rightColor = accent;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
@@ -569,7 +607,7 @@ class _RankRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 3),
                 Text(
-                  '${entry.gamesWon}',
+                  '$midValue',
                   style: TextStyle(
                     color: midColor.withValues(alpha: highlight ? 1 : 0.85),
                     fontWeight: FontWeight.w700,

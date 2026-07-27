@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
+import '../game/config/hardcore_rules.dart';
 import '../game/models/room_leaderboard.dart';
 import '../game/room_type.dart';
+import '../services/app_economy_config_service.dart';
 import '../services/lang_service.dart';
 import '../utils/match_time.dart';
 import '../utils/player_rank.dart';
@@ -29,6 +32,8 @@ class GameHudOverlay extends StatelessWidget {
     this.matchElapsed = 0,
     this.alivePlayerCount = 0,
     this.aliveBotCount = 0,
+    this.hardcoreArenaActive = false,
+    this.hardcoreVictoryBlockKey,
     this.onBack,
   });
 
@@ -39,6 +44,10 @@ class GameHudOverlay extends StatelessWidget {
   final double matchElapsed;
   final int alivePlayerCount;
   final int aliveBotCount;
+  /// Hardcore: ≥6 alive — full growth & top kill rewards.
+  final bool hardcoreArenaActive;
+  /// Hardcore: lang key when low-pop size cap applies.
+  final String? hardcoreVictoryBlockKey;
   final VoidCallback? onBack;
 
   static const int topRowCount = 3;
@@ -50,6 +59,18 @@ class GameHudOverlay extends StatelessWidget {
 
   static double totalTopInset(BuildContext context) =>
       GameHudMetrics.totalTopInset(context);
+
+  static String _hardcoreTooltip(String key) {
+    final lang = LanguageService.instance;
+    final econ = AppEconomyConfigService.instance.config;
+    return lang
+        .t(key)
+        .replaceAll('{minAlive}', '${econ.hardcoreArenaMinAlive}')
+        .replaceAll('{cap}', '${HardcoreRules.liveLowPopRadiusCap.round()}')
+        .replaceAll('{victory}', '${HardcoreRules.victoryRadius.round()}')
+        .replaceAll('{kill}', '${econ.rewardHardcoreKill}')
+        .replaceAll('{elim}', '${econ.penaltyHardcore}');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -117,6 +138,8 @@ class GameHudOverlay extends StatelessWidget {
                     isLoadTestRoom: isLoadTestRoom,
                     alivePlayerCount: alivePlayerCount,
                     aliveBotCount: aliveBotCount,
+                    hardcoreArenaActive: hardcoreArenaActive,
+                    hardcoreVictoryBlockKey: hardcoreVictoryBlockKey,
                     onBack: onBack,
                   ),
                   SizedBox(height: rowGap),
@@ -188,6 +211,8 @@ class _HudHeaderRow extends StatelessWidget {
     this.isLoadTestRoom = false,
     required this.alivePlayerCount,
     required this.aliveBotCount,
+    this.hardcoreArenaActive = false,
+    this.hardcoreVictoryBlockKey,
     this.onBack,
   });
 
@@ -197,6 +222,8 @@ class _HudHeaderRow extends StatelessWidget {
   final bool isLoadTestRoom;
   final int alivePlayerCount;
   final int aliveBotCount;
+  final bool hardcoreArenaActive;
+  final String? hardcoreVictoryBlockKey;
   final VoidCallback? onBack;
 
   static const _twoLineBreakpoint = 400.0;
@@ -204,7 +231,7 @@ class _HudHeaderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = ResponsiveLayout.of(context);
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final roomAccent = _roomAccent(roomType);
     final title = lang.t('leaderboard_title');
 
@@ -219,6 +246,8 @@ class _HudHeaderRow extends StatelessWidget {
           isLoadTestRoom: isLoadTestRoom,
           alivePlayerCount: alivePlayerCount,
           aliveBotCount: aliveBotCount,
+          hardcoreArenaActive: hardcoreArenaActive,
+          hardcoreVictoryBlockKey: hardcoreVictoryBlockKey,
           chipGap: r.w(twoLine ? 5 : 6),
         );
         final leading = _HudLeadingSection(
@@ -359,6 +388,8 @@ class _HudMetaChips extends StatelessWidget {
     this.isLoadTestRoom = false,
     required this.alivePlayerCount,
     required this.aliveBotCount,
+    this.hardcoreArenaActive = false,
+    this.hardcoreVictoryBlockKey,
     required this.chipGap,
   });
 
@@ -368,15 +399,26 @@ class _HudMetaChips extends StatelessWidget {
   final bool isLoadTestRoom;
   final int alivePlayerCount;
   final int aliveBotCount;
+  final bool hardcoreArenaActive;
+  final String? hardcoreVictoryBlockKey;
   final double chipGap;
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.lang;
     final chips = <Widget>[
       _PopulationChip(
         playerCount: alivePlayerCount,
         botCount: aliveBotCount,
+        showBots: roomType.allowsBots,
       ),
+      if (roomType == RoomType.hardcore)
+        _HardcoreArenaChip(
+          alive: alivePlayerCount,
+          active: hardcoreArenaActive,
+        ),
+      if (hardcoreVictoryBlockKey != null)
+        _HardcoreGateChip(label: lang.t(hardcoreVictoryBlockKey!)),
       _MatchTimerChip(elapsed: matchElapsed),
       _RoomBadge(
         roomType: roomType,
@@ -569,7 +611,10 @@ class _PodiumNameCell extends StatelessWidget {
     }
 
     final rankTier = !entry.isBot && entry.rankPoints != null
-        ? playerRankForPoints(entry.rankPoints!)
+        ? playerRankForPoints(
+            entry.rankPoints!,
+            username: entry.name,
+          )
         : null;
     final badgeSize = r.sp(11);
 
@@ -725,10 +770,12 @@ class _PopulationChip extends StatelessWidget {
   const _PopulationChip({
     required this.playerCount,
     required this.botCount,
+    this.showBots = true,
   });
 
   final int playerCount;
   final int botCount;
+  final bool showBots;
 
   static const _playerColor = Color(0xFF7CFFCB);
   static const _botColor = Color(0xFFFF8AD8);
@@ -736,7 +783,7 @@ class _PopulationChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = ResponsiveLayout.of(context);
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final compact = r.isCompact;
 
     return Container(
@@ -778,40 +825,135 @@ class _PopulationChip extends StatelessWidget {
               ),
             ),
           ],
-          SizedBox(width: r.w(6)),
-          Container(
-            width: 1,
-            height: r.h(12),
-            color: Colors.white.withValues(alpha: 0.16),
-          ),
-          SizedBox(width: r.w(6)),
-          Icon(
-            Icons.smart_toy_rounded,
-            size: r.sp(12),
-            color: _botColor.withValues(alpha: 0.95),
-          ),
-          SizedBox(width: r.w(3)),
-          Text(
-            '$botCount',
-            style: TextStyle(
-              color: _botColor.withValues(alpha: 0.95),
-              fontSize: r.sp(11),
-              fontWeight: FontWeight.w800,
-              fontFeatures: const [FontFeature.tabularFigures()],
+          if (showBots) ...[
+            SizedBox(width: r.w(6)),
+            Container(
+              width: 1,
+              height: r.h(12),
+              color: Colors.white.withValues(alpha: 0.16),
             ),
-          ),
-          if (!compact) ...[
-            SizedBox(width: r.w(4)),
+            SizedBox(width: r.w(6)),
+            Icon(
+              Icons.smart_toy_rounded,
+              size: r.sp(12),
+              color: _botColor.withValues(alpha: 0.95),
+            ),
+            SizedBox(width: r.w(3)),
             Text(
-              lang.t('hud_population_bots'),
+              '$botCount',
               style: TextStyle(
-                color: _botColor.withValues(alpha: 0.72),
-                fontSize: r.sp(9),
-                fontWeight: FontWeight.w600,
+                color: _botColor.withValues(alpha: 0.95),
+                fontSize: r.sp(11),
+                fontWeight: FontWeight.w800,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
+            if (!compact) ...[
+              SizedBox(width: r.w(4)),
+              Text(
+                lang.t('hud_population_bots'),
+                style: TextStyle(
+                  color: _botColor.withValues(alpha: 0.72),
+                  fontSize: r.sp(9),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _HardcoreArenaChip extends StatelessWidget {
+  const _HardcoreArenaChip({
+    required this.alive,
+    required this.active,
+  });
+
+  final int alive;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = ResponsiveLayout.of(context);
+    final lang = context.lang;
+    final color = active ? const Color(0xFF7CFFCB) : const Color(0xFFFF8A5C);
+    final minAlive =
+        AppEconomyConfigService.instance.config.hardcoreArenaMinAlive;
+    final popShort = lang
+        .t('hardcore_arena_pop_short')
+        .replaceAll('{alive}', '$alive')
+        .replaceAll('{min}', '$minAlive');
+    final label = active
+        ? lang.t('hardcore_arena_active')
+        : '${lang.t('hardcore_arena_passive')} · $popShort';
+
+    return Tooltip(
+      message: GameHudOverlay._hardcoreTooltip(
+        active
+            ? 'hardcore_arena_active_tooltip'
+            : 'hardcore_arena_passive_tooltip',
+      ),
+      waitDuration: const Duration(milliseconds: 350),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: r.w(r.isCompact ? 5 : 7),
+          vertical: r.w(3),
+        ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: color.withValues(alpha: 0.1),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: r.sp(10),
+            fontWeight: FontWeight.w800,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HardcoreGateChip extends StatelessWidget {
+  const _HardcoreGateChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = ResponsiveLayout.of(context);
+    const color = Color(0xFFFF6688);
+
+    return Tooltip(
+      message: GameHudOverlay._hardcoreTooltip(
+        'hardcore_gate_low_pop_cap_tooltip',
+      ),
+      waitDuration: const Duration(milliseconds: 350),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: r.w(r.isCompact ? 5 : 7),
+          vertical: r.w(3),
+        ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: color.withValues(alpha: 0.12),
+          border: Border.all(color: color.withValues(alpha: 0.45)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: r.sp(9),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -878,7 +1020,7 @@ class _RoomBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = ResponsiveLayout.of(context);
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final accent = _roomAccent(roomType);
     final compact = r.isCompact;
     final label = _roomLabel(
@@ -987,6 +1129,9 @@ String _roomLabel(
   int? instanceNumber, {
   bool isLoadTest = false,
 }) {
+  if (type == RoomType.hardcore && !isLoadTest) {
+    return lang.t('room_hardcore_title');
+  }
   if (instanceNumber != null && type != RoomType.simple) {
     return type.instanceTitle(
       lang.t,
@@ -1007,6 +1152,8 @@ String _roomTitleKey(RoomType type) {
       return 'room_elite_title';
     case RoomType.unique:
       return 'room_unique_title';
+    case RoomType.hardcore:
+      return 'room_hardcore_title';
   }
 }
 
@@ -1020,6 +1167,8 @@ Color _roomAccent(RoomType type) {
       return const Color(0xFFFF00AA);
     case RoomType.unique:
       return const Color(0xFFFF6600);
+    case RoomType.hardcore:
+      return const Color(0xFFFF3355);
   }
 }
 
@@ -1033,5 +1182,7 @@ IconData _roomIcon(RoomType type) {
       return Icons.public;
     case RoomType.unique:
       return Icons.bolt;
+    case RoomType.hardcore:
+      return Icons.whatshot;
   }
 }

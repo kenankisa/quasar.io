@@ -1,25 +1,27 @@
 import 'package:flutter/material.dart';
+import '../../utils/lang_scope.dart';
 
 import '../../game/models/admin_stats.dart';
 import '../../game/room_type.dart';
 import '../../services/lang_service.dart';
 import '../../services/room_tuning_service.dart';
 import '../admin_room_tuning_editor.dart';
-import 'admin_section_title.dart';
+import 'admin_theme.dart';
 
-Color _accentForRoom(RoomType type) => switch (type) {
+Color accentForRoom(RoomType type) => switch (type) {
       RoomType.simple => const Color(0xFF7AD7FF),
-      RoomType.normal => const Color(0xFF00F0FF),
+      RoomType.normal => const Color(0xFF00D4E8),
       RoomType.elite => const Color(0xFFFFC857),
       RoomType.unique => const Color(0xFFFF00AA),
+      RoomType.hardcore => const Color(0xFFFF3355),
     };
 
-String _roomTitle(LanguageService lang, RoomType type) {
+String roomTitle(LanguageService lang, RoomType type) {
   final title = lang.t(type.instanceTitleKey).replaceAll('{number}', '').trim();
   return title.isEmpty ? type.name : title;
 }
 
-/// Evren seçici + sekmeli ayar paneli (master–detail).
+/// Universe master–detail tuning with players-only Hardcore support.
 class AdminUniversesTuningPanel extends StatefulWidget {
   const AdminUniversesTuningPanel({
     super.key,
@@ -40,122 +42,87 @@ class _AdminUniversesTuningPanelState extends State<AdminUniversesTuningPanel> {
   AdminTuningCategory _category = AdminTuningCategory.world;
   bool _showLive = false;
 
+  void _selectRoom(RoomType type) {
+    setState(() {
+      _selected = type;
+      _showLive = false;
+      if (!type.allowsBots && _category == AdminTuningCategory.bots) {
+        _category = AdminTuningCategory.hardcoreRules;
+      }
+      if (type.allowsBots && _category == AdminTuningCategory.hardcoreRules) {
+        _category = AdminTuningCategory.world;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final tier = widget.stats.tiers[_selected] ??
         AdminUniverseTierStats.empty(_selected);
-    final accent = _accentForRoom(_selected);
+    final accent = accentForRoom(_selected);
     final tuning = RoomTuningService.instance.tuningFor(_selected);
     final saving = RoomTuningService.instance.saving;
-    final huntPct = (tuning.huntPriority * 100).round();
+    final playersOnly = _selected.isPlayersOnly;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.showSectionChrome) ...[
-          Row(
-            children: [
-              Expanded(
-                child: AdminSectionTitle(title: lang.t('admin_universes_section')),
-              ),
-              if (saving)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Color(0xFF00F0FF),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      lang.t('admin_tune_saving'),
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            lang.t('admin_room_tuning_howto'),
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.42),
-              fontSize: 12,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 14),
-        ] else if (saving) ...[
-          Align(
-            alignment: Alignment.centerRight,
+        if (saving)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 const SizedBox(
                   width: 12,
                   height: 12,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Color(0xFF00F0FF),
+                    color: AdminTheme.accent,
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Text(
                   lang.t('admin_tune_saving'),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
+                  style: const TextStyle(
+                    color: AdminTheme.textMuted,
                     fontSize: 11,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
-        ],
         _UniverseSelector(
           selected: _selected,
           stats: widget.stats,
-          onSelected: (type) => setState(() {
-            _selected = type;
-            _showLive = false;
-          }),
+          onSelected: _selectRoom,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: accent.withValues(alpha: 0.32)),
-            color: const Color(0xFF0A0A1A).withValues(alpha: 0.82),
-          ),
+          decoration: AdminTheme.softPanel(accentColor: accent),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
+                padding: const EdgeInsets.fromLTRB(16, 16, 12, 10),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _roomTitle(lang, _selected),
+                            roomTitle(lang, _selected),
                             style: TextStyle(
                               color: accent,
                               fontWeight: FontWeight.w900,
                               fontSize: 18,
-                              letterSpacing: 0.4,
+                              letterSpacing: 0.2,
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 8),
                           Wrap(
                             spacing: 8,
                             runSpacing: 6,
@@ -166,19 +133,33 @@ class _AdminUniversesTuningPanelState extends State<AdminUniversesTuningPanel> {
                                 color: accent,
                               ),
                               _MetaPill(
-                                label: lang.t('admin_hunt_priority_short'),
-                                value: '$huntPct%',
+                                label: lang.t('admin_tune_world_size'),
+                                value: tuning.worldSize.round().toString(),
                                 color: accent,
                               ),
                               _MetaPill(
-                                label: lang.t('admin_tune_events_short'),
-                                value: tuning.cosmicEventsEnabled
-                                    ? lang.t('admin_tune_on')
-                                    : lang.t('admin_tune_off'),
-                                color: tuning.cosmicEventsEnabled
-                                    ? const Color(0xFFFFC857)
-                                    : Colors.white38,
+                                label: lang.t('admin_tune_max_players_short'),
+                                value: '${tuning.maxPlayers}',
+                                color: accent,
                               ),
+                              if (playersOnly) ...[
+                                _MetaPill(
+                                  label: lang.t('admin_tune_mode'),
+                                  value: lang.t('admin_tune_players_only'),
+                                  color: const Color(0xFFFF3355),
+                                ),
+                                _MetaPill(
+                                  label: lang.t('admin_tune_victory_radius'),
+                                  value: tuning.victoryRadius.round().toString(),
+                                  color: const Color(0xFFFF3355),
+                                ),
+                              ] else
+                                _MetaPill(
+                                  label: lang.t('admin_hunt_priority_short'),
+                                  value:
+                                      '${(tuning.huntPriority * 100).round()}%',
+                                  color: accent,
+                                ),
                             ],
                           ),
                         ],
@@ -203,15 +184,52 @@ class _AdminUniversesTuningPanelState extends State<AdminUniversesTuningPanel> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: _LiveSnapshotRow(tier: tier, accent: accent),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                child: AdminUniverseDifficultyPresets(
-                  roomType: _selected,
+                child: _LiveSnapshotRow(
+                  tier: tier,
                   accent: accent,
+                  playersOnly: playersOnly,
+                  maxPlayers: tuning.maxPlayers,
+                  worldSize: tuning.worldSize.round(),
                 ),
               ),
+              if (!playersOnly)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                  child: AdminUniverseDifficultyPresets(
+                    roomType: _selected,
+                    accent: accent,
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(AdminTheme.radiusSm),
+                      color: accent.withValues(alpha: 0.08),
+                      border: Border.all(color: accent.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.whatshot, color: accent, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            lang.t('admin_tune_hardcore_banner'),
+                            style: TextStyle(
+                              color: accent.withValues(alpha: 0.9),
+                              fontSize: 12,
+                              height: 1.35,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
                 child: _CategoryBar(
@@ -219,6 +237,8 @@ class _AdminUniversesTuningPanelState extends State<AdminUniversesTuningPanel> {
                   category: _category,
                   showLive: _showLive,
                   liveCount: tier.instances.length,
+                  allowBots: _selected.allowsBots,
+                  playersOnly: playersOnly,
                   onCategory: (c) => setState(() {
                     _category = c;
                     _showLive = false;
@@ -229,7 +249,11 @@ class _AdminUniversesTuningPanelState extends State<AdminUniversesTuningPanel> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
                 child: _showLive
-                    ? _LiveInstancesList(tier: tier, accent: accent)
+                    ? _LiveInstancesList(
+                        tier: tier,
+                        accent: accent,
+                        playersOnly: playersOnly,
+                      )
                     : AdminRoomTuningEditor(
                         roomType: _selected,
                         accent: accent,
@@ -239,7 +263,7 @@ class _AdminUniversesTuningPanelState extends State<AdminUniversesTuningPanel> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Row(
           children: [
             TextButton(
@@ -255,44 +279,19 @@ class _AdminUniversesTuningPanelState extends State<AdminUniversesTuningPanel> {
               ),
             ),
             const Spacer(),
-            if (saving)
-              Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Color(0xFF00F0FF),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      lang.t('admin_tune_saving'),
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             FilledButton.icon(
-              onPressed: (saving || !RoomTuningService.instance.hasUnsavedChanges)
-                  ? null
-                  : () => RoomTuningService.instance.save(),
+              onPressed:
+                  (saving || !RoomTuningService.instance.hasUnsavedChanges)
+                      ? null
+                      : () => RoomTuningService.instance.save(),
               icon: const Icon(Icons.save_rounded, size: 18),
               label: Text(lang.t('admin_room_tuning_save')),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF00F0FF),
-                foregroundColor: const Color(0xFF020208),
+                backgroundColor: AdminTheme.accent,
+                foregroundColor: AdminTheme.bg,
                 disabledBackgroundColor:
-                    const Color(0xFF00F0FF).withValues(alpha: 0.2),
-                disabledForegroundColor:
-                    Colors.white.withValues(alpha: 0.4),
+                    AdminTheme.accent.withValues(alpha: 0.2),
+                disabledForegroundColor: Colors.white.withValues(alpha: 0.4),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
@@ -321,8 +320,10 @@ class _UniverseSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 560;
-        final children = RoomType.values.map((type) {
+        final wide = constraints.maxWidth >= 720;
+        final children = RoomType.values
+            .where((type) => type != RoomType.hardcore)
+            .map((type) {
           final tier = stats.tiers[type] ?? AdminUniverseTierStats.empty(type);
           return _UniversePickTile(
             type: type,
@@ -343,23 +344,15 @@ class _UniverseSelector extends StatelessWidget {
           );
         }
 
-        return Column(
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Row(
-              children: [
-                Expanded(child: children[0]),
-                const SizedBox(width: 8),
-                Expanded(child: children[1]),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(child: children[2]),
-                const SizedBox(width: 8),
-                Expanded(child: children[3]),
-              ],
-            ),
+            for (final child in children)
+              SizedBox(
+                width: (constraints.maxWidth - 8) / 2,
+                child: child,
+              ),
           ],
         );
       },
@@ -382,26 +375,23 @@ class _UniversePickTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
-    final accent = _accentForRoom(type);
-    final huntPct =
-        (RoomTuningService.instance.tuningFor(type).huntPriority * 100)
-            .round();
+    final lang = context.lang;
+    final accent = accentForRoom(type);
+    final tuning = RoomTuningService.instance.tuningFor(type);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AdminTheme.radius),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 11),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AdminTheme.radius),
             border: Border.all(
               color: selected
-                  ? accent.withValues(alpha: 0.75)
+                  ? accent.withValues(alpha: 0.8)
                   : accent.withValues(alpha: 0.22),
               width: selected ? 1.6 : 1,
             ),
@@ -409,27 +399,37 @@ class _UniversePickTile extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                accent.withValues(alpha: selected ? 0.2 : 0.07),
-                const Color(0xFF0A0A1A).withValues(alpha: 0.92),
+                accent.withValues(alpha: selected ? 0.22 : 0.07),
+                AdminTheme.surface.withValues(alpha: 0.95),
               ],
             ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _roomTitle(lang, type),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: accent,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      roomTitle(lang, type),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: accent,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  if (type.isPlayersOnly)
+                    Icon(Icons.person_rounded, size: 14, color: accent),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
-                lang.t(tier.difficultyLabelKey),
+                type.isPlayersOnly
+                    ? lang.t('admin_tune_players_only')
+                    : lang.t(tier.difficultyLabelKey),
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.5),
                   fontSize: 11,
@@ -448,17 +448,19 @@ class _UniversePickTile extends StatelessWidget {
                   _MiniCount(
                     icon: Icons.person_rounded,
                     value: '${tier.players}',
-                    color: const Color(0xFF00F0FF),
+                    color: AdminTheme.accent,
                   ),
-                  const SizedBox(width: 8),
-                  _MiniCount(
-                    icon: Icons.smart_toy_outlined,
-                    value: '${tier.bots}',
-                    color: const Color(0xFFFF00AA),
-                  ),
+                  if (type.allowsBots) ...[
+                    const SizedBox(width: 8),
+                    _MiniCount(
+                      icon: Icons.smart_toy_outlined,
+                      value: '${tier.bots}',
+                      color: const Color(0xFFFF00AA),
+                    ),
+                  ],
                   const Spacer(),
                   Text(
-                    '$huntPct%',
+                    '${tuning.maxPlayers}',
                     style: TextStyle(
                       color: accent.withValues(alpha: 0.9),
                       fontSize: 11,
@@ -552,18 +554,27 @@ class _MetaPill extends StatelessWidget {
 }
 
 class _LiveSnapshotRow extends StatelessWidget {
-  const _LiveSnapshotRow({required this.tier, required this.accent});
+  const _LiveSnapshotRow({
+    required this.tier,
+    required this.accent,
+    required this.playersOnly,
+    required this.maxPlayers,
+    required this.worldSize,
+  });
 
   final AdminUniverseTierStats tier;
   final Color accent;
+  final bool playersOnly;
+  final int maxPlayers;
+  final int worldSize;
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AdminTheme.radiusSm),
         color: Colors.white.withValues(alpha: 0.03),
       ),
       child: Row(
@@ -579,16 +590,31 @@ class _LiveSnapshotRow extends StatelessWidget {
             child: _SnapshotCell(
               label: lang.t('lobby_stat_players_short'),
               value: '${tier.players}',
-              color: const Color(0xFF00F0FF),
+              color: AdminTheme.accent,
             ),
           ),
           Expanded(
             child: _SnapshotCell(
-              label: lang.t('lobby_stat_bots_short'),
-              value: '${tier.bots}',
-              color: const Color(0xFFFF00AA),
+              label: lang.t('admin_tune_max_players_short'),
+              value: '$maxPlayers',
+              color: AdminTheme.accentSoft,
             ),
           ),
+          Expanded(
+            child: _SnapshotCell(
+              label: lang.t('admin_tune_world_size_short'),
+              value: '$worldSize',
+              color: AdminTheme.warning,
+            ),
+          ),
+          if (!playersOnly)
+            Expanded(
+              child: _SnapshotCell(
+                label: lang.t('lobby_stat_bots_short'),
+                value: '${tier.bots}',
+                color: const Color(0xFFFF00AA),
+              ),
+            ),
         ],
       ),
     );
@@ -614,7 +640,7 @@ class _SnapshotCell extends StatelessWidget {
           value,
           style: TextStyle(
             color: color,
-            fontSize: 18,
+            fontSize: 16,
             fontWeight: FontWeight.w900,
             height: 1,
           ),
@@ -622,6 +648,9 @@ class _SnapshotCell extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.4),
             fontSize: 10,
@@ -639,6 +668,8 @@ class _CategoryBar extends StatelessWidget {
     required this.category,
     required this.showLive,
     required this.liveCount,
+    required this.allowBots,
+    required this.playersOnly,
     required this.onCategory,
     required this.onLive,
   });
@@ -647,12 +678,14 @@ class _CategoryBar extends StatelessWidget {
   final AdminTuningCategory category;
   final bool showLive;
   final int liveCount;
+  final bool allowBots;
+  final bool playersOnly;
   final ValueChanged<AdminTuningCategory> onCategory;
   final VoidCallback onLive;
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final items = <({Object id, String label})>[
       (id: AdminTuningCategory.world, label: lang.t('admin_tune_tab_world')),
       (id: AdminTuningCategory.tempo, label: lang.t('admin_tune_tab_tempo')),
@@ -662,7 +695,13 @@ class _CategoryBar extends StatelessWidget {
         id: AdminTuningCategory.radiation,
         label: lang.t('admin_tune_tab_radiation'),
       ),
-      (id: AdminTuningCategory.bots, label: lang.t('admin_tune_tab_bots')),
+      if (allowBots)
+        (id: AdminTuningCategory.bots, label: lang.t('admin_tune_tab_bots')),
+      if (playersOnly)
+        (
+          id: AdminTuningCategory.hardcoreRules,
+          label: lang.t('admin_tune_tab_hardcore_rules'),
+        ),
       (
         id: 'live',
         label:
@@ -746,14 +785,19 @@ class _CategoryChip extends StatelessWidget {
 }
 
 class _LiveInstancesList extends StatelessWidget {
-  const _LiveInstancesList({required this.tier, required this.accent});
+  const _LiveInstancesList({
+    required this.tier,
+    required this.accent,
+    required this.playersOnly,
+  });
 
   final AdminUniverseTierStats tier;
   final Color accent;
+  final bool playersOnly;
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     if (tier.instances.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -782,7 +826,11 @@ class _LiveInstancesList extends StatelessWidget {
         ...tier.instances.map(
           (instance) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: _InstanceRow(instance: instance, accent: accent),
+            child: _InstanceRow(
+              instance: instance,
+              accent: accent,
+              playersOnly: playersOnly,
+            ),
           ),
         ),
       ],
@@ -794,14 +842,16 @@ class _InstanceRow extends StatelessWidget {
   const _InstanceRow({
     required this.instance,
     required this.accent,
+    required this.playersOnly,
   });
 
   final AdminUniverseInstance instance;
   final Color accent;
+  final bool playersOnly;
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final name = instance.roomType.instanceTitle(
       lang.t,
       number: instance.instanceNumber,
@@ -830,14 +880,16 @@ class _InstanceRow extends StatelessWidget {
           _MiniStat(
             icon: Icons.person_rounded,
             value: '${instance.players}',
-            color: const Color(0xFF00F0FF),
+            color: AdminTheme.accent,
           ),
-          const SizedBox(width: 10),
-          _MiniStat(
-            icon: Icons.smart_toy_outlined,
-            value: '${instance.bots}',
-            color: const Color(0xFFFF00AA),
-          ),
+          if (!playersOnly) ...[
+            const SizedBox(width: 10),
+            _MiniStat(
+              icon: Icons.smart_toy_outlined,
+              value: '${instance.bots}',
+              color: const Color(0xFFFF00AA),
+            ),
+          ],
           const SizedBox(width: 10),
           _MiniStat(
             icon: Icons.radar_rounded,

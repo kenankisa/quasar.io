@@ -62,6 +62,7 @@ class AdminUniverseTierStats {
         RoomType.normal => 'admin_difficulty_standard',
         RoomType.elite => 'admin_difficulty_elite',
         RoomType.unique => 'admin_difficulty_unique',
+        RoomType.hardcore => 'admin_difficulty_hardcore',
       };
 }
 

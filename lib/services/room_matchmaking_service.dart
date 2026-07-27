@@ -40,6 +40,51 @@ class SimLoadTestRoom {
   final int leaderRadius;
 }
 
+/// Result of [RoomMatchmakingService.joinHardcoreUniverse].
+sealed class HardcoreJoinResult {
+  const HardcoreJoinResult();
+}
+
+class HardcoreJoined extends HardcoreJoinResult {
+  const HardcoreJoined(this.instance);
+  final RoomInstance instance;
+}
+
+class HardcoreQueued extends HardcoreJoinResult {
+  const HardcoreQueued({required this.position});
+  final int position;
+}
+
+class HardcoreQueueStatus {
+  const HardcoreQueueStatus({
+    required this.status,
+    this.position,
+    this.instance,
+  });
+
+  factory HardcoreQueueStatus.fromJson(Map<String, dynamic> json) {
+    final status = (json['status'] as String?) ?? 'idle';
+    if (status == 'admitted' && json['room_instance_id'] != null) {
+      return HardcoreQueueStatus(
+        status: status,
+        instance: RoomInstance.fromJson(json),
+      );
+    }
+    return HardcoreQueueStatus(
+      status: status,
+      position: (json['position'] as num?)?.toInt(),
+    );
+  }
+
+  /// idle | queued | admitted
+  final String status;
+  final int? position;
+  final RoomInstance? instance;
+
+  bool get isQueued => status == 'queued';
+  bool get isAdmitted => status == 'admitted' && instance != null;
+}
+
 /// Sunucu tarafı oda atama — eğitim evreni hariç tüm evrenler.
 class RoomMatchmakingService {
   RoomMatchmakingService._();
@@ -52,6 +97,14 @@ class RoomMatchmakingService {
   Future<RoomInstance> joinRoom(RoomType roomType) async {
     if (roomType == RoomType.simple) {
       throw const RoomMatchmakingException('training_room_no_matchmaking');
+    }
+    if (roomType == RoomType.hardcore) {
+      final result = await joinHardcoreUniverse();
+      if (result is HardcoreJoined) return result.instance;
+      if (result is HardcoreQueued) {
+        throw RoomMatchmakingException('hardcore_queued:${result.position}');
+      }
+      throw const RoomMatchmakingException('join_game_room_empty_response');
     }
 
     try {
@@ -71,6 +124,74 @@ class RoomMatchmakingService {
     } on PostgrestException catch (e) {
       debugPrint('join_game_room: ${e.message}');
       throw RoomMatchmakingException(e.message);
+    }
+  }
+
+  /// Hardcore: join seat or enter live queue (max 20).
+  Future<HardcoreJoinResult> joinHardcoreUniverse() async {
+    try {
+      final response = await _client.rpc('join_hardcore_universe');
+      if (response == null) {
+        throw const RoomMatchmakingException('join_game_room_empty_response');
+      }
+      final map = Map<String, dynamic>.from(response as Map);
+      if (map['queued'] == true) {
+        return HardcoreQueued(
+          position: (map['position'] as num?)?.toInt() ?? 1,
+        );
+      }
+      final instance = RoomInstance.fromJson(map);
+      _activeRoomInstanceId = instance.id;
+      return HardcoreJoined(await ensureRoomCosmicSync(instance));
+    } on PostgrestException catch (e) {
+      debugPrint('join_hardcore_universe: ${e.message}');
+      throw RoomMatchmakingException(e.message);
+    }
+  }
+
+  /// Isolated Hardcore Arena Test room (admin / sims). Bypasses live singleton
+  /// and leader-radius join gates used by [joinRoomInstance].
+  Future<RoomInstance> joinHardcoreTestUniverse() async {
+    try {
+      final response = await _client.rpc('join_hardcore_test_universe');
+      if (response == null) {
+        throw const RoomMatchmakingException('join_game_room_empty_response');
+      }
+      final map = Map<String, dynamic>.from(response as Map);
+      if (map['queued'] == true) {
+        throw RoomMatchmakingException(
+          'hardcore_queued:${(map['position'] as num?)?.toInt() ?? 1}',
+        );
+      }
+      final instance = RoomInstance.fromJson(map);
+      _activeRoomInstanceId = instance.id;
+      return ensureRoomCosmicSync(instance);
+    } on PostgrestException catch (e) {
+      debugPrint('join_hardcore_test_universe: ${e.message}');
+      throw RoomMatchmakingException(e.message);
+    }
+  }
+
+  Future<HardcoreQueueStatus> getHardcoreQueueStatus() async {
+    try {
+      final response = await _client.rpc('get_hardcore_queue_status');
+      if (response == null) {
+        return const HardcoreQueueStatus(status: 'idle');
+      }
+      return HardcoreQueueStatus.fromJson(
+        Map<String, dynamic>.from(response as Map),
+      );
+    } on PostgrestException catch (e) {
+      debugPrint('get_hardcore_queue_status: ${e.message}');
+      return const HardcoreQueueStatus(status: 'idle');
+    }
+  }
+
+  Future<void> leaveHardcoreQueue() async {
+    try {
+      await _client.rpc('leave_hardcore_queue');
+    } on PostgrestException catch (e) {
+      debugPrint('leave_hardcore_queue: ${e.message}');
     }
   }
 
@@ -98,6 +219,7 @@ class RoomMatchmakingService {
 
   /// Paylaşılan maç saati + cosmic seed — tüm oyuncular aynı olay takvimini kullanır.
   Future<RoomInstance> ensureRoomCosmicSync(RoomInstance instance) async {
+    _activeRoomInstanceId = instance.id;
     try {
       final response = await _client.rpc(
         'ensure_room_cosmic_sync',
@@ -151,16 +273,49 @@ class RoomMatchmakingService {
     }
   }
 
-  Future<void> leaveActiveRoom() => leaveRoom();
-
-  Future<void> updateLeaderRadius(String roomInstanceId, int leaderRadius) async {
+  /// Hardcore: force [userId] off the seat (self, peer predator, or admin).
+  /// Frees capacity when the prey client fails to call [leaveRoom].
+  Future<bool> hardcoreReleaseMember({
+    required String roomInstanceId,
+    required String userId,
+  }) async {
+    if (roomInstanceId.isEmpty || userId.isEmpty) return false;
     try {
       await _client.rpc(
-        'update_room_leader_radius',
+        'hardcore_release_member',
         params: {
           'p_room_instance_id': roomInstanceId,
-          'p_leader_radius': leaderRadius,
+          'p_user_id': userId,
         },
+      );
+      return true;
+    } on PostgrestException catch (e) {
+      debugPrint('hardcore_release_member: ${e.message}');
+      return false;
+    } catch (e) {
+      debugPrint('hardcore_release_member: $e');
+      return false;
+    }
+  }
+
+  Future<void> leaveActiveRoom() => leaveRoom();
+
+  Future<void> updateLeaderRadius(
+    String roomInstanceId,
+    int leaderRadius, {
+    int? selfRadius,
+  }) async {
+    try {
+      final params = <String, dynamic>{
+        'p_room_instance_id': roomInstanceId,
+        'p_leader_radius': leaderRadius,
+      };
+      if (selfRadius != null) {
+        params['p_self_radius'] = selfRadius;
+      }
+      await _client.rpc(
+        'update_room_leader_radius',
+        params: params,
       );
     } on PostgrestException catch (e) {
       debugPrint('update_room_leader_radius: ${e.message}');

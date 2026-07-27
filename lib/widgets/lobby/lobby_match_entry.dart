@@ -5,6 +5,7 @@ import '../../game/room_type.dart';
 import '../../services/admin_access.dart';
 import '../../services/lang_service.dart';
 import '../../services/room_matchmaking_service.dart';
+import '../../utils/hardcore_cooldown.dart';
 
 /// Context-free helpers for competitive join + matchmaking error copy.
 /// Full enter-room orchestration stays on [LobbyScreen] (portal / navigator).
@@ -39,6 +40,14 @@ class LobbyMatchEntry {
   static String matchmakingErrorText(String raw) {
     final lang = LanguageService.instance;
     final msg = raw.toLowerCase();
+    if (msg.contains('hardcore_cooldown')) {
+      return hardcoreCooldownLockMessage(lang, null);
+    }
+    if (msg.contains('hardcore_locked') || msg.contains('hardcore_trophy')) {
+      return lang.t('room_hardcore_lock')
+          .replaceAll('{earned}', '?')
+          .replaceAll('{cap}', '${RoomTypeLobby.hardcoreTrophyRequirement}');
+    }
     if (msg.contains('first_login_lock')) {
       return lang.t('lobby_first_login_lock');
     }
@@ -55,5 +64,13 @@ class LobbyMatchEntry {
       return lang.t('matchmaking_not_authenticated');
     }
     return lang.t('matchmaking_error');
+  }
+
+  /// Parses `hardcore_queued:N` thrown by [RoomMatchmakingService.joinRoom].
+  static int? queuedPositionFromError(String raw) {
+    final marker = 'hardcore_queued:';
+    final idx = raw.toLowerCase().indexOf(marker);
+    if (idx < 0) return null;
+    return int.tryParse(raw.substring(idx + marker.length).trim());
   }
 }

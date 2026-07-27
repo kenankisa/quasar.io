@@ -301,6 +301,7 @@ class BotDifficulty {
         RoomType.normal => standard,
         RoomType.elite => elite,
         RoomType.unique => unique,
+        RoomType.hardcore => elite,
       };
 
   static final Map<RoomType, BotDifficulty> _overrides = {};

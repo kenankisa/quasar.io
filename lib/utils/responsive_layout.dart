@@ -35,7 +35,6 @@ class ResponsiveLayout {
   /// Bottom offsets for in-game controls (proportional to screen height).
   double get gameControlBottom => size.height * 0.033;
   double get linkButtonBottom => size.height * 0.118;
-
   /// Design width for chat (2) + abilities (4) + gaps + side pads at scale 1.
   static const double bottomBarDesignWidth =
       12 + 48 + 8 + 48 + 16 + 58 + 8 + 58 + 8 + 58 + 8 + 72 + 12;

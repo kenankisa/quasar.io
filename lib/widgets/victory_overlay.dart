@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../game/room_type.dart';
 import '../services/lang_service.dart';
@@ -15,6 +17,7 @@ class VictoryOverlay extends StatefulWidget {
     super.key,
     required this.roomType,
     required this.onContinue,
+    this.showFirstTrainingTrophy = false,
     this.diamondReward,
     this.victoryElapsed = 0,
     this.ensureBaseClaimed,
@@ -26,6 +29,7 @@ class VictoryOverlay extends StatefulWidget {
 
   final RoomType roomType;
   final VoidCallback onContinue;
+  final bool showFirstTrainingTrophy;
   final int? diamondReward;
   final double victoryElapsed;
   final Future<bool> Function()? ensureBaseClaimed;
@@ -49,6 +53,11 @@ class _VictoryOverlayState extends State<VictoryOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     )..repeat(reverse: true);
+    final reward =
+        widget.diamondReward ?? widget.roomType.diamondRewardForPlacement(1);
+    if (reward > 0) {
+      unawaited(ProfileService.instance.refreshMatchDayDiamonds());
+    }
   }
 
   @override
@@ -59,7 +68,7 @@ class _VictoryOverlayState extends State<VictoryOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final reward =
         widget.diamondReward ?? widget.roomType.diamondRewardForPlacement(1);
 
@@ -115,6 +124,10 @@ class _VictoryOverlayState extends State<VictoryOverlay>
                       height: 1.5,
                     ),
                   ),
+                  if (widget.showFirstTrainingTrophy) ...[
+                    const SizedBox(height: 20),
+                    _FirstTrainingTrophyCard(lang: lang),
+                  ],
                   const SizedBox(height: 8),
                   Text(
                     lang
@@ -130,12 +143,17 @@ class _VictoryOverlayState extends State<VictoryOverlay>
                   ),
                   const SizedBox(height: 10),
                   ListenableBuilder(
-                    listenable: ProfileService.instance.profileNotifier,
+                    listenable: Listenable.merge([
+                      ProfileService.instance.profileNotifier,
+                      ProfileService.instance.matchDayDiamondNotifier,
+                    ]),
                     builder: (context, _) {
                       final diamonds =
                           ProfileService.instance.profileNotifier.value
                                   ?.diamonds ??
                               0;
+                      final day =
+                          ProfileService.instance.matchDayDiamondNotifier.value;
                       return Column(
                         children: [
                           Text(
@@ -149,6 +167,21 @@ class _VictoryOverlayState extends State<VictoryOverlay>
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                          if (reward > 0 && day != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              lang
+                                  .t('match_day_diamond_progress')
+                                  .replaceAll('{earned}', '${day.earned}')
+                                  .replaceAll('{cap}', '${day.cap}'),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.45),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 6),
                           Text(
                             '${lang.t('lobby_diamonds')}: $diamonds',
@@ -270,6 +303,77 @@ class _VictoryBurstPainter extends CustomPainter {
       oldDelegate.t != t;
 }
 
+class _FirstTrainingTrophyCard extends StatelessWidget {
+  const _FirstTrainingTrophyCard({required this.lang});
+
+  final LanguageService lang;
+
+  static const _gold = Color(0xFFFFD54F);
+
+  @override
+  Widget build(BuildContext context) {
+    final total = PlayerProfile.hardcoreTrophyRequirement;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: [
+            _gold.withValues(alpha: 0.18),
+            const Color(0xFF1A1028).withValues(alpha: 0.85),
+          ],
+        ),
+        border: Border.all(color: _gold.withValues(alpha: 0.45)),
+        boxShadow: [
+          BoxShadow(
+            color: _gold.withValues(alpha: 0.12),
+            blurRadius: 18,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.emoji_events, color: _gold, size: 36),
+          const SizedBox(height: 10),
+          Text(
+            lang.t('victory_first_trophy_title'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _gold,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            lang
+                .t('victory_first_trophy_desc')
+                .replaceAll('{earned}', '1')
+                .replaceAll('{total}', '$total'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.78),
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            lang.t('victory_first_trophy_normal_unlock'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.55),
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Shown when another player finishes and the room closes for everyone.
 class FrozenChampionOverlay extends StatefulWidget {
   const FrozenChampionOverlay({
@@ -310,6 +414,14 @@ class FrozenChampionOverlay extends StatefulWidget {
 class _FrozenChampionOverlayState extends State<FrozenChampionOverlay> {
   bool _isLeaving = false;
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.diamondReward > 0) {
+      unawaited(ProfileService.instance.refreshMatchDayDiamonds());
+    }
+  }
+
   Future<void> _handleLeave() async {
     if (_isLeaving) return;
     PlayerSessionService.instance.noteActivity();
@@ -319,7 +431,7 @@ class _FrozenChampionOverlayState extends State<FrozenChampionOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
 
     return Material(
       color: Colors.black.withValues(alpha: 0.75),
@@ -365,6 +477,29 @@ class _FrozenChampionOverlayState extends State<FrozenChampionOverlay> {
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
+                ),
+                ListenableBuilder(
+                  listenable: ProfileService.instance.matchDayDiamondNotifier,
+                  builder: (context, _) {
+                    final day =
+                        ProfileService.instance.matchDayDiamondNotifier.value;
+                    if (day == null) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        lang
+                            .t('match_day_diamond_progress')
+                            .replaceAll('{earned}', '${day.earned}')
+                            .replaceAll('{cap}', '${day.cap}'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.45),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
               const SizedBox(height: 8),

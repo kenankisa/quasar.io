@@ -7,10 +7,20 @@ class LiveAnnouncement {
     required this.expiresAt,
   });
 
+  static const _hardcoreWinPrefix = '__HC_WIN__|';
+
   final String id;
   final String body;
   final DateTime createdAt;
   final DateTime expiresAt;
+
+  bool get isHardcoreWin => body.startsWith(_hardcoreWinPrefix);
+
+  String? get hardcoreWinnerName {
+    if (!isHardcoreWin) return null;
+    final name = body.substring(_hardcoreWinPrefix.length).trim();
+    return name.isEmpty ? null : name;
+  }
 
   bool get isExpired => DateTime.now().toUtc().isAfter(expiresAt.toUtc());
 

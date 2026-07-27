@@ -2,7 +2,9 @@ import '../components/bot_player.dart';
 import '../config/bot_difficulty.dart';
 import '../config/match_pacing.dart';
 import '../config/room_config.dart';
+import '../config/room_matchmaking.dart';
 import '../room_type.dart';
+import 'hardcore_arena_tuning.dart';
 
 /// Admin-tunable per-room game balance (world, pace, events, radiation, bots).
 class RoomGameTuning {
@@ -31,6 +33,8 @@ class RoomGameTuning {
     required this.meteorShowerInitialCooldown,
     required this.eventGrowthCapPerBurst,
     required this.supernovaPlanetCount,
+    required this.supernovaShrinkPercentMin,
+    required this.supernovaShrinkPercentMax,
     required this.radiationRadius,
     required this.radiationIdleSeconds,
     required this.lateGameRadiationRadius,
@@ -53,6 +57,8 @@ class RoomGameTuning {
     required this.personalityCoward,
     required this.personalityAggressive,
     required this.personalityOpportunist,
+    required this.maxPlayers,
+    required this.hardcoreArena,
   });
 
   final double worldSize;
@@ -82,6 +88,8 @@ class RoomGameTuning {
   final double meteorShowerInitialCooldown;
   final double eventGrowthCapPerBurst;
   final int supernovaPlanetCount;
+  final double supernovaShrinkPercentMin;
+  final double supernovaShrinkPercentMax;
 
   final double radiationRadius;
   final double radiationIdleSeconds;
@@ -106,6 +114,14 @@ class RoomGameTuning {
   final int personalityCoward;
   final int personalityAggressive;
   final int personalityOpportunist;
+  final int maxPlayers;
+  final HardcoreArenaTuning hardcoreArena;
+
+  static int defaultMaxPlayersFor(RoomType type) => switch (type) {
+        RoomType.simple => 1,
+        RoomType.hardcore => RoomMatchmaking.hardcoreDefaultMaxPlayers,
+        _ => RoomMatchmaking.maxRealPlayersPerRoom,
+      };
 
   factory RoomGameTuning.defaultsFor(RoomType type) {
     final room = RoomConfig.presetFor(type);
@@ -136,6 +152,8 @@ class RoomGameTuning {
       meteorShowerInitialCooldown: pacing.meteorShowerInitialCooldown,
       eventGrowthCapPerBurst: pacing.eventGrowthCapPerBurst,
       supernovaPlanetCount: pacing.supernovaPlanetCount,
+      supernovaShrinkPercentMin: 8,
+      supernovaShrinkPercentMax: 15,
       radiationRadius: pacing.radiationRadius,
       radiationIdleSeconds: pacing.radiationIdleSeconds,
       lateGameRadiationRadius: pacing.lateGameRadiationRadius,
@@ -160,6 +178,8 @@ class RoomGameTuning {
           bot.personalityWeights[BotPersonality.aggressive] ?? 35,
       personalityOpportunist:
           bot.personalityWeights[BotPersonality.opportunist] ?? 35,
+      maxPlayers: defaultMaxPlayersFor(type),
+      hardcoreArena: HardcoreArenaTuning.defaults,
     );
   }
 
@@ -301,6 +321,8 @@ class RoomGameTuning {
     double? meteorShowerInitialCooldown,
     double? eventGrowthCapPerBurst,
     int? supernovaPlanetCount,
+    double? supernovaShrinkPercentMin,
+    double? supernovaShrinkPercentMax,
     double? radiationRadius,
     double? radiationIdleSeconds,
     double? lateGameRadiationRadius,
@@ -323,6 +345,8 @@ class RoomGameTuning {
     int? personalityCoward,
     int? personalityAggressive,
     int? personalityOpportunist,
+    int? maxPlayers,
+    HardcoreArenaTuning? hardcoreArena,
   }) {
     return RoomGameTuning(
       worldSize: worldSize ?? this.worldSize,
@@ -356,6 +380,10 @@ class RoomGameTuning {
       eventGrowthCapPerBurst:
           eventGrowthCapPerBurst ?? this.eventGrowthCapPerBurst,
       supernovaPlanetCount: supernovaPlanetCount ?? this.supernovaPlanetCount,
+      supernovaShrinkPercentMin:
+          supernovaShrinkPercentMin ?? this.supernovaShrinkPercentMin,
+      supernovaShrinkPercentMax:
+          supernovaShrinkPercentMax ?? this.supernovaShrinkPercentMax,
       radiationRadius: radiationRadius ?? this.radiationRadius,
       radiationIdleSeconds: radiationIdleSeconds ?? this.radiationIdleSeconds,
       lateGameRadiationRadius:
@@ -383,6 +411,8 @@ class RoomGameTuning {
           personalityAggressive ?? this.personalityAggressive,
       personalityOpportunist:
           personalityOpportunist ?? this.personalityOpportunist,
+      maxPlayers: maxPlayers ?? this.maxPlayers,
+      hardcoreArena: hardcoreArena ?? this.hardcoreArena,
     );
   }
 
@@ -412,6 +442,8 @@ class RoomGameTuning {
         'meteorShowerInitialCooldown': meteorShowerInitialCooldown,
         'eventGrowthCapPerBurst': eventGrowthCapPerBurst,
         'supernovaPlanetCount': supernovaPlanetCount,
+        'supernovaShrinkPercentMin': supernovaShrinkPercentMin,
+        'supernovaShrinkPercentMax': supernovaShrinkPercentMax,
         'radiationRadius': radiationRadius,
         'radiationIdleSeconds': radiationIdleSeconds,
         'lateGameRadiationRadius': lateGameRadiationRadius,
@@ -434,6 +466,8 @@ class RoomGameTuning {
         'personalityCoward': personalityCoward,
         'personalityAggressive': personalityAggressive,
         'personalityOpportunist': personalityOpportunist,
+        'maxPlayers': maxPlayers,
+        'hardcoreArena': hardcoreArena.toJson(),
       };
 
   factory RoomGameTuning.fromJson(
@@ -531,6 +565,14 @@ class RoomGameTuning {
           dbl('eventGrowthCapPerBurst', d.eventGrowthCapPerBurst).clamp(0, 200),
       supernovaPlanetCount:
           integer('supernovaPlanetCount', d.supernovaPlanetCount).clamp(0, 100),
+      supernovaShrinkPercentMin: dbl(
+        'supernovaShrinkPercentMin',
+        d.supernovaShrinkPercentMin,
+      ).clamp(3, 50),
+      supernovaShrinkPercentMax: dbl(
+        'supernovaShrinkPercentMax',
+        d.supernovaShrinkPercentMax,
+      ).clamp(3, 50),
       radiationRadius:
           dbl('radiationRadius', d.radiationRadius).clamp(40, 500),
       radiationIdleSeconds:
@@ -574,6 +616,12 @@ class RoomGameTuning {
         'personalityOpportunist',
         d.personalityOpportunist,
       ).clamp(0, 100),
+      maxPlayers: integer('maxPlayers', d.maxPlayers).clamp(0, 100),
+      hardcoreArena: HardcoreArenaTuning.fromJson(
+        json['hardcoreArena'] is Map
+            ? Map<String, dynamic>.from(json['hardcoreArena'] as Map)
+            : null,
+      ),
     );
   }
 }

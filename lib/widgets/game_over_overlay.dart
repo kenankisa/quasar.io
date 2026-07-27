@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../game/orbit_game.dart';
+import '../game/room_type.dart';
 import '../services/lang_service.dart';
 import '../utils/match_time.dart';
 import 'bot_name_badge.dart';
@@ -12,12 +14,14 @@ class GameOverOverlay extends StatefulWidget {
     required this.onQuit,
     required this.onWatch,
     this.diamondPenalty = 1,
+    this.hardcorePassiveElim = false,
   });
 
   final OrbitGame game;
   final Future<void> Function() onQuit;
   final VoidCallback onWatch;
   final int diamondPenalty;
+  final bool hardcorePassiveElim;
 
   @override
   State<GameOverOverlay> createState() => _GameOverOverlayState();
@@ -25,6 +29,8 @@ class GameOverOverlay extends StatefulWidget {
 
 class _GameOverOverlayState extends State<GameOverOverlay> {
   bool _isQuitting = false;
+
+  bool get _isHardcore => widget.game.roomType == RoomType.hardcore;
 
   Future<void> _handleQuit() async {
     if (_isQuitting) return;
@@ -34,7 +40,7 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final texts = lang.gameOverTexts;
     return ValueListenableBuilder<int>(
       valueListenable: widget.game.hudTick,
@@ -47,6 +53,17 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
     LanguageService lang,
     Map<String, String> texts,
   ) {
+    final watchLabel = _isHardcore
+        ? lang.t('game_over_watch_hardcore')
+        : texts['watch_match']!;
+    final penaltyLabel = _isHardcore
+        ? lang
+            .t('game_over_hardcore_diamond_lost')
+            .replaceAll('{diamonds}', '${widget.diamondPenalty}')
+        : lang
+            .t('game_over_diamond_penalty')
+            .replaceAll('{diamonds}', '${widget.diamondPenalty}');
+
     return Material(
       color: Colors.black.withValues(alpha: 0.82),
       child: Center(
@@ -92,14 +109,26 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
               if (widget.diamondPenalty > 0) ...[
                 const SizedBox(height: 8),
                 Text(
-                  lang
-                      .t('game_over_diamond_penalty')
-                      .replaceAll('{diamonds}', '${widget.diamondPenalty}'),
+                  penaltyLabel,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: const Color(0xFFFF00AA).withValues(alpha: 0.85),
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              if (_isHardcore) ...[
+                const SizedBox(height: 8),
+                Text(
+                  lang.t(widget.hardcorePassiveElim
+                      ? 'game_over_hardcore_cooldown_passive'
+                      : 'game_over_hardcore_cooldown'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.65),
+                    fontSize: 13,
+                    height: 1.35,
                   ),
                 ),
               ],
@@ -147,13 +176,15 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
               ValueListenableBuilder<String?>(
                 valueListenable: widget.game.remoteChampionName,
                 builder: (context, championName, _) {
-                  final canWatch = championName == null &&
+                  // Hardcore leaves the universe on elim — no Watch (channel gone).
+                  final canWatch = !_isHardcore &&
+                      championName == null &&
                       !widget.game.isUniverseClosed;
                   return Column(
                     children: [
                       if (canWatch) ...[
                         _CosmicButton(
-                          label: texts['watch_match']!,
+                          label: watchLabel,
                           icon: Icons.visibility_outlined,
                           primary: true,
                           onPressed: widget.onWatch,

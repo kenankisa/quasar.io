@@ -9,7 +9,10 @@ import '../game/models/room_instance.dart';
 import '../services/admin_access.dart';
 import '../services/analytics_play_tracker.dart';
 import '../services/auth_service.dart';
+import '../utils/lang_rebuild.dart';
+import '../utils/lang_scope.dart';
 import '../services/lang_service.dart';
+import '../services/lobby_online_count_service.dart';
 import '../services/lobby_room_stats_service.dart';
 import '../services/player_inbox_service.dart';
 import '../services/player_session_service.dart';
@@ -17,23 +20,26 @@ import '../services/profile_service.dart';
 import '../services/room_matchmaking_service.dart';
 import '../services/settings_service.dart';
 import '../utils/app_lifecycle.dart';
+import '../utils/hardcore_cooldown.dart';
 import '../utils/responsive_layout.dart';
-import 'admin_screen.dart';
+import 'admin_screen.dart' deferred as admin_screen;
+import 'daily_chest_dialog.dart';
 import 'how_to_play_dialog.dart';
 import 'neon_space_particle_painter.dart';
 import 'player_messages_dialog.dart';
 import 'profile_menu.dart';
 import 'settings_dialog.dart';
 import 'skill_tree_dialog.dart';
-import 'sound_settings_dialog.dart';
 import 'version_notes_dialog.dart';
 import 'wormhole_portal.dart';
-import 'lobby_chat_panel.dart';
 import '../services/lobby_chat_service.dart';
-import 'lobby/lobby_brand_hero.dart';
+import 'lobby/lobby_compact_header.dart';
+import 'lobby/lobby_compact_room_list.dart';
+import 'lobby/lobby_cosmic_chrome.dart';
 import 'lobby/lobby_match_entry.dart';
-import 'lobby/lobby_room_list.dart';
-import 'lobby/lobby_top_bar.dart';
+import 'lobby/lobby_menu_sheet.dart';
+import 'lobby/lobby_social_tab.dart';
+import 'lobby/hardcore_queue_dialog.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -43,30 +49,32 @@ class LobbyScreen extends StatefulWidget {
 }
 
 class _LobbyScreenState extends State<LobbyScreen>
-    with TickerProviderStateMixin, WidgetsBindingObserver {
-  late final AnimationController _glowController;
+    with TickerProviderStateMixin, WidgetsBindingObserver, LangChangeListener {
   late final AnimationController _particleController;
+  late final TabController _tabController;
 
   PlayerProfile? _profile;
   bool _loading = true;
   bool _signingOut = false;
   bool _enteringRoom = false;
   RealtimeChannel? _profileChannel;
+  bool _suspendedForGameplay = false;
+
+  @override
+  void onLangChanged() => setState(() {});
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _glowController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    )..repeat(reverse: true);
+    _tabController = TabController(length: 2, vsync: this);
     _particleController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 25),
     )..repeat();
     _loadProfile();
     LobbyRoomStatsService.instance.attach();
+    LobbyOnlineCountService.instance.attach();
     PlayerInboxService.instance.refreshUnreadCount();
     unawaited(LobbyChatService.instance.attach());
   }
@@ -74,26 +82,49 @@ class _LobbyScreenState extends State<LobbyScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (AppLifecycle.shouldPause(state)) {
-      _glowController.stop();
       _particleController.stop();
       LobbyRoomStatsService.instance.pauseForBackground();
-    } else {
-      if (!_glowController.isAnimating) {
-        _glowController.repeat(reverse: true);
-      }
+      LobbyOnlineCountService.instance.pauseForBackground();
+    } else if (!_suspendedForGameplay) {
       if (!_particleController.isAnimating) {
         _particleController.repeat();
       }
       LobbyRoomStatsService.instance.resumeFromBackground();
+      LobbyOnlineCountService.instance.resumeFromBackground();
     }
+  }
+
+  /// Maç sırasında arka plandaki lobi animasyonları ve polling'i durdurur.
+  void _suspendLobbyForGameplay() {
+    if (_suspendedForGameplay) return;
+    _suspendedForGameplay = true;
+    _particleController.stop();
+    LobbyRoomStatsService.instance.detach();
+    LobbyOnlineCountService.instance.detach();
+    unawaited(LobbyChatService.instance.detach());
+  }
+
+  /// Lobiye dönünce animasyonları ve servisleri yeniden başlatır.
+  void _resumeLobbyForGameplay() {
+    if (!_suspendedForGameplay) return;
+    _suspendedForGameplay = false;
+    if (!mounted) return;
+    if (!_particleController.isAnimating) {
+      _particleController.repeat();
+    }
+    LobbyRoomStatsService.instance.attach();
+    LobbyOnlineCountService.instance.attach();
+    unawaited(LobbyChatService.instance.attach());
   }
 
   @override
   void dispose() {
+    _suspendedForGameplay = false;
     WidgetsBinding.instance.removeObserver(this);
-    _glowController.dispose();
+    _tabController.dispose();
     _particleController.dispose();
     LobbyRoomStatsService.instance.detach();
+    LobbyOnlineCountService.instance.detach();
     unawaited(LobbyChatService.instance.detach());
     if (_profileChannel != null) {
       Supabase.instance.client.removeChannel(_profileChannel!);
@@ -115,6 +146,8 @@ class _LobbyScreenState extends State<LobbyScreen>
         _profileChannel = ProfileService.instance.subscribeToProfile((updated) {
           if (mounted) setState(() => _profile = updated);
         });
+        unawaited(ProfileService.instance.fetchDailyChestStatus());
+        unawaited(ProfileService.instance.refreshMatchDayDiamonds());
       }
       _maybeShowWhatsNew();
     } catch (e, stackTrace) {
@@ -141,12 +174,33 @@ class _LobbyScreenState extends State<LobbyScreen>
     );
   }
 
+  void _openMenu() {
+    final profile =
+        ProfileService.instance.profileNotifier.value ?? _profile;
+    LobbyMenuSheet.show(
+      context,
+      freeSkillPoints: profile?.availableSkillPoints ?? 0,
+      showAdminPanel: AdminAccess.isCurrentUserAdmin,
+      signingOut: _signingOut,
+      onHowToPlay: () => HowToPlayDialog.show(context),
+      onSkills: () {
+        if (profile == null) return;
+        SkillTreeDialog.show(context, profile);
+      },
+      onVersionNotes: () => VersionNotesDialog.show(context),
+      onAdminPanel: AdminAccess.isCurrentUserAdmin ? _openAdminPanel : null,
+      onSignOut: _handleSignOut,
+    );
+  }
+
   /// Yalnızca sunucu onaylı admin — e-posta / client allowlist yok (L2).
   Future<void> _openAdminPanel() async {
     final ok = await AdminAccess.refreshAdminStatus();
     if (!ok || !mounted) return;
+    await admin_screen.loadLibrary();
+    if (!mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AdminScreen()),
+      MaterialPageRoute(builder: (_) => admin_screen.AdminScreen()),
     );
   }
 
@@ -161,7 +215,7 @@ class _LobbyScreenState extends State<LobbyScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(LanguageService.instance.t('profile_update_error'))),
+          SnackBar(content: Text(context.lang.t('profile_update_error'))),
         );
       }
     } finally {
@@ -170,10 +224,10 @@ class _LobbyScreenState extends State<LobbyScreen>
   }
 
   Future<void> _showPlayerAlreadyActiveDialog() async {
-    final lang = LanguageService.instance;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
+        final lang = dialogContext.lang;
         return AlertDialog(
           backgroundColor: const Color(0xFF0A0A1A),
           shape: RoundedRectangleBorder(
@@ -225,7 +279,26 @@ class _LobbyScreenState extends State<LobbyScreen>
       tutorialCompleted: tutorialCompleted,
       gamesWon: gamesWon,
       diamonds: diamonds,
+      universeTrophies: profile?.totalUniverseTrophies ?? 0,
+      isAdmin: AdminAccess.isCurrentUserAdmin,
     )) {
+      return;
+    }
+
+    if (roomType == RoomType.hardcore &&
+        profile?.isHardcoreOnCooldown == true &&
+        !AdminAccess.isCurrentUserAdmin) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            hardcoreCooldownLockMessage(
+              LanguageService.instance,
+              profile?.hardcoreCooldownRemaining,
+            ),
+          ),
+        ),
+      );
       return;
     }
 
@@ -234,11 +307,35 @@ class _LobbyScreenState extends State<LobbyScreen>
     // Portal starts immediately — covers the whole wait (no loading circle).
     WormholeTransit? transit;
     try {
+      RoomInstance? roomInstance;
+
+      // Hardcore: resolve seat/queue before the wormhole so queue UI is clear.
+      if (roomType == RoomType.hardcore) {
+        final hc = await RoomMatchmakingService.instance.joinHardcoreUniverse();
+        if (hc is HardcoreQueued) {
+          if (!mounted) return;
+          setState(() => _enteringRoom = false);
+          final admitted = await HardcoreQueueDialog.show(
+            context,
+            initialPosition: hc.position,
+          );
+          if (admitted == null || !mounted) return;
+          setState(() => _enteringRoom = true);
+          roomInstance = await RoomMatchmakingService.instance
+              .ensureRoomCosmicSync(admitted);
+        } else if (hc is HardcoreJoined) {
+          roomInstance = hc.instance;
+        }
+      }
+
+      if (!mounted) return;
       transit = await WormholeTransit.begin(context, roomType);
       if (!mounted) {
         transit.dispose();
         return;
       }
+
+      _suspendLobbyForGameplay();
 
       final status = await PlayerSessionService.instance.checkStatus();
       if (status.blockedOnOtherDevice) {
@@ -253,8 +350,7 @@ class _LobbyScreenState extends State<LobbyScreen>
       await PlayerSessionService.instance.setInGame(roomType);
       await AnalyticsPlayTracker.instance.begin(roomType);
 
-      RoomInstance? roomInstance;
-      if (roomType != RoomType.simple) {
+      if (roomType != RoomType.simple && roomType != RoomType.hardcore) {
         roomInstance = await LobbyMatchEntry.joinCompetitiveRoom(roomType);
       }
 
@@ -322,10 +418,11 @@ class _LobbyScreenState extends State<LobbyScreen>
       transit = null;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(LanguageService.instance.t('matchmaking_error'))),
+        SnackBar(content: Text(context.lang.t('matchmaking_error'))),
       );
     } finally {
       transit?.dispose();
+      _resumeLobbyForGameplay();
       await AnalyticsPlayTracker.instance.end(roomType: roomType);
       await PlayerSessionService.instance.setInLobby();
       if (mounted) setState(() => _enteringRoom = false);
@@ -335,6 +432,8 @@ class _LobbyScreenState extends State<LobbyScreen>
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
+    final lang = context.lang;
+    final r = ResponsiveLayout.of(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFF020208),
@@ -347,10 +446,11 @@ class _LobbyScreenState extends State<LobbyScreen>
                 size: size,
                 painter: NeonSpaceParticlePainter(
                   progress: _particleController.value,
-                  particleCount: 40,
+                  particleCount:
+                      SettingsService.instance.lowPerformanceMode ? 8 : 24,
                   seed: 7,
-                  blurSigma: 3,
-                  maxOpacity: 0.5,
+                  blurSigma: 2,
+                  maxOpacity: 0.35,
                 ),
               );
             },
@@ -358,11 +458,23 @@ class _LobbyScreenState extends State<LobbyScreen>
           Container(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: const Alignment(0, -0.6),
-                radius: 1.4,
+                center: const Alignment(0, -0.5),
+                radius: 1.2,
                 colors: [
-                  const Color(0xFF1A0033).withValues(alpha: 0.35),
+                  const Color(0xFF1A0033).withValues(alpha: 0.28),
                   const Color(0xFF020208),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0.85, 0.9),
+                radius: 0.65,
+                colors: [
+                  const Color(0xFF102040).withValues(alpha: 0.18),
+                  Colors.transparent,
                 ],
               ),
             ),
@@ -374,87 +486,130 @@ class _LobbyScreenState extends State<LobbyScreen>
                   listenable: Listenable.merge([
                     SettingsService.instance,
                     ProfileService.instance.profileNotifier,
+                    ProfileService.instance.dailyChestAvailable,
+                    ProfileService.instance.dailyChestNextAvailableAt,
+                    ProfileService.instance.matchDayDiamondNotifier,
                     PlayerInboxService.instance,
                     AdminAccess.instance,
+                    LobbyOnlineCountService.instance,
                   ]),
                   builder: (context, _) {
                     final profile =
                         ProfileService.instance.profileNotifier.value ??
                             _profile;
-                    return LobbyTopBar(
-                      glowAnimation: _glowController,
+                    final dayStatus =
+                        ProfileService.instance.matchDayDiamondNotifier.value;
+                    return LobbyCompactHeader(
                       diamonds: profile?.diamonds ?? 0,
+                      matchDayEarned: dayStatus?.earned,
+                      matchDayCap: dayStatus?.cap,
+                      onlineCount: LobbyOnlineCountService.instance.count,
                       avatarUrl: profile?.avatarUrl,
                       loading: _loading,
-                      signingOut: _signingOut,
-                      musicEnabled: SettingsService.instance.musicEnabled,
-                      showAdminPanel: AdminAccess.isCurrentUserAdmin,
                       unreadMessages: PlayerInboxService.instance.unreadCount,
-                      onAdminPanelTap: _openAdminPanel,
+                      dailyChestAvailable:
+                          ProfileService.instance.dailyChestAvailable.value,
+                      dailyChestNextAvailableAt: ProfileService
+                          .instance.dailyChestNextAvailableAt.value,
+                      onDailyChestTap: () => DailyChestDialog.show(context),
                       onMessagesTap: () => PlayerMessagesDialog.show(context),
-                      onSoundTap: () => SoundSettingsDialog.toggleMusic(),
                       onSettingsTap: () => SettingsDialog.show(context),
-                      onSignOutTap: _handleSignOut,
+                      onMenuTap: _openMenu,
                       onProfileTap: _openProfileMenu,
                     );
                   },
                 ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    r.w(r.isCompact ? 12 : 16),
+                    r.h(6),
+                    r.w(r.isCompact ? 12 : 16),
+                    0,
+                  ),
+                  child: LobbyCosmicPanel(
+                    borderRadius: 14,
+                    glowStrength: 0.1,
+                    padding: const EdgeInsets.all(4),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      dividerColor: Colors.transparent,
+                      indicator: const LobbyCosmicTabIndicator(
+                        accent: Color(0xFF00F0FF),
+                        secondary: Color(0xFF8868FF),
+                        borderRadius: 10,
+                      ),
+                      labelColor: const Color(0xFF00F0FF),
+                      unselectedLabelColor: Colors.white.withValues(alpha: 0.42),
+                      labelStyle: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: r.sp(12.5),
+                        letterSpacing: 0.5,
+                        shadows: [
+                          Shadow(
+                            color: const Color(0xFF00F0FF).withValues(alpha: 0.35),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      unselectedLabelStyle: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: r.sp(12.5),
+                      ),
+                      tabs: [
+                        Tab(
+                          height: 42,
+                          icon: Icon(Icons.rocket_launch_rounded, size: r.sp(17)),
+                          text: lang.t('lobby_tab_play'),
+                        ),
+                        Tab(
+                          height: 42,
+                          icon: Icon(Icons.hub_outlined, size: r.sp(17)),
+                          text: lang.t('lobby_tab_social'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(height: r.h(6)),
                 Expanded(
-                  child: Column(
+                  child: TabBarView(
+                    controller: _tabController,
                     children: [
-                      SizedBox(height: ResponsiveLayout.of(context).h(12)),
                       ListenableBuilder(
-                        listenable: ProfileService.instance.profileNotifier,
+                        listenable: Listenable.merge([
+                          ProfileService.instance.profileNotifier,
+                          LobbyRoomStatsService.instance,
+                        ]),
                         builder: (context, _) {
-                          final skillProfile = ProfileService
+                          final profile = ProfileService
                                   .instance.profileNotifier.value ??
                               _profile;
-                          return LobbyBrandHero(
-                            glowAnimation: _glowController,
-                            freeSp: skillProfile?.availableSkillPoints ?? 0,
-                            onTitleLongPress: AdminAccess.isCurrentUserAdmin
-                                ? _openAdminPanel
-                                : null,
-                            onVersionTap: () =>
-                                VersionNotesDialog.show(context),
-                            onHowToPlayTap: () =>
-                                HowToPlayDialog.show(context),
-                            onSkillsTap: () {
-                              if (skillProfile == null) return;
-                              SkillTreeDialog.show(context, skillProfile);
-                            },
+                          return LobbyCompactRoomList(
+                            diamonds: profile?.diamonds ?? 0,
+                            gamesWon: profile?.gamesWon ?? 0,
+                            tutorialCompleted:
+                                profile?.tutorialCompleted ?? false,
+                            portalAnimation: _particleController,
+                            trophyWinsSimple: profile?.trophyWinsSimple ?? 0,
+                            trophyWinsNormal: profile?.trophyWinsNormal ?? 0,
+                            trophyWinsElite: profile?.trophyWinsElite ?? 0,
+                            trophyWinsUnique: profile?.trophyWinsUnique ?? 0,
+                            hardcoreCooldownUntil:
+                                profile?.hardcoreCooldownUntil,
+                            hardcoreCooldownBypassed:
+                                AdminAccess.isCurrentUserAdmin,
+                            onRoomSelected: _enterRoom,
                           );
                         },
                       ),
-                      SizedBox(height: ResponsiveLayout.of(context).h(16)),
-                      Expanded(
-                        child: ListenableBuilder(
-                          listenable: Listenable.merge([
-                            ProfileService.instance.profileNotifier,
-                            LobbyRoomStatsService.instance,
-                          ]),
-                          builder: (context, _) {
-                            final profile = ProfileService
-                                    .instance.profileNotifier.value ??
-                                _profile;
-                            return LobbyRoomList(
-                              diamonds: profile?.diamonds ?? 0,
-                              gamesWon: profile?.gamesWon ?? 0,
-                              tutorialCompleted:
-                                  profile?.tutorialCompleted ?? false,
-                              portalAnimation: _particleController,
-                              onRoomSelected: _enterRoom,
-                            );
-                          },
-                        ),
-                      ),
+                      const LobbySocialTab(),
                     ],
                   ),
                 ),
               ],
             ),
-            ),
-          const LobbyChatPanel(),
+          ),
         ],
       ),
     );

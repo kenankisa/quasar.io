@@ -29,7 +29,7 @@ class SwallowHuntParticleAura extends Component with HasGameReference<OrbitGame>
     }
 
     _spawnTimer -= dt;
-    final interval = CanvasEffects.mobileLiteMode
+    final interval = CanvasEffects.economyMode
         ? 0.12 - state.huntCharge * 0.035
         : 0.08 - state.huntCharge * 0.03;
     if (_spawnTimer > 0) return;

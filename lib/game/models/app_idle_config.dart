@@ -7,6 +7,12 @@ class AppIdleConfig {
     required this.matchWarningCountdownSeconds,
     required this.matchMassDrainPerSecond,
     required this.matchKickMassThreshold,
+    required this.hardcoreMatchIdleBeforeWarningSeconds,
+    required this.hardcoreMatchWarningCountdownSeconds,
+    required this.hardcoreMatchMassDrainPerSecond,
+    required this.hardcoreAfkLateGameRadius,
+    required this.hardcoreMatchIdleBeforeWarningLateSeconds,
+    required this.hardcoreMatchMassDrainLatePerSecond,
   });
 
   final int lobbyIdleBeforeWarningSeconds;
@@ -17,6 +23,13 @@ class AppIdleConfig {
   final int matchMassDrainPerSecond;
   final int matchKickMassThreshold;
 
+  final int hardcoreMatchIdleBeforeWarningSeconds;
+  final int hardcoreMatchWarningCountdownSeconds;
+  final int hardcoreMatchMassDrainPerSecond;
+  final int hardcoreAfkLateGameRadius;
+  final int hardcoreMatchIdleBeforeWarningLateSeconds;
+  final int hardcoreMatchMassDrainLatePerSecond;
+
   static const defaults = AppIdleConfig(
     lobbyIdleBeforeWarningSeconds: 30,
     lobbyWarningCountdownSeconds: 15,
@@ -24,6 +37,12 @@ class AppIdleConfig {
     matchWarningCountdownSeconds: 3,
     matchMassDrainPerSecond: 20,
     matchKickMassThreshold: 25,
+    hardcoreMatchIdleBeforeWarningSeconds: 15,
+    hardcoreMatchWarningCountdownSeconds: 3,
+    hardcoreMatchMassDrainPerSecond: 7,
+    hardcoreAfkLateGameRadius: 450,
+    hardcoreMatchIdleBeforeWarningLateSeconds: 10,
+    hardcoreMatchMassDrainLatePerSecond: 10,
   );
 
   Duration get lobbyIdleBeforeWarning =>
@@ -45,6 +64,12 @@ class AppIdleConfig {
     int? matchWarningCountdownSeconds,
     int? matchMassDrainPerSecond,
     int? matchKickMassThreshold,
+    int? hardcoreMatchIdleBeforeWarningSeconds,
+    int? hardcoreMatchWarningCountdownSeconds,
+    int? hardcoreMatchMassDrainPerSecond,
+    int? hardcoreAfkLateGameRadius,
+    int? hardcoreMatchIdleBeforeWarningLateSeconds,
+    int? hardcoreMatchMassDrainLatePerSecond,
   }) {
     return AppIdleConfig(
       lobbyIdleBeforeWarningSeconds:
@@ -59,6 +84,22 @@ class AppIdleConfig {
           matchMassDrainPerSecond ?? this.matchMassDrainPerSecond,
       matchKickMassThreshold:
           matchKickMassThreshold ?? this.matchKickMassThreshold,
+      hardcoreMatchIdleBeforeWarningSeconds:
+          hardcoreMatchIdleBeforeWarningSeconds ??
+              this.hardcoreMatchIdleBeforeWarningSeconds,
+      hardcoreMatchWarningCountdownSeconds:
+          hardcoreMatchWarningCountdownSeconds ??
+              this.hardcoreMatchWarningCountdownSeconds,
+      hardcoreMatchMassDrainPerSecond: hardcoreMatchMassDrainPerSecond ??
+          this.hardcoreMatchMassDrainPerSecond,
+      hardcoreAfkLateGameRadius:
+          hardcoreAfkLateGameRadius ?? this.hardcoreAfkLateGameRadius,
+      hardcoreMatchIdleBeforeWarningLateSeconds:
+          hardcoreMatchIdleBeforeWarningLateSeconds ??
+              this.hardcoreMatchIdleBeforeWarningLateSeconds,
+      hardcoreMatchMassDrainLatePerSecond:
+          hardcoreMatchMassDrainLatePerSecond ??
+              this.hardcoreMatchMassDrainLatePerSecond,
     );
   }
 
@@ -70,6 +111,16 @@ class AppIdleConfig {
         'matchWarningCountdownSeconds': matchWarningCountdownSeconds,
         'matchMassDrainPerSecond': matchMassDrainPerSecond,
         'matchKickMassThreshold': matchKickMassThreshold,
+        'hardcoreMatchIdleBeforeWarningSeconds':
+            hardcoreMatchIdleBeforeWarningSeconds,
+        'hardcoreMatchWarningCountdownSeconds':
+            hardcoreMatchWarningCountdownSeconds,
+        'hardcoreMatchMassDrainPerSecond': hardcoreMatchMassDrainPerSecond,
+        'hardcoreAfkLateGameRadius': hardcoreAfkLateGameRadius,
+        'hardcoreMatchIdleBeforeWarningLateSeconds':
+            hardcoreMatchIdleBeforeWarningLateSeconds,
+        'hardcoreMatchMassDrainLatePerSecond':
+            hardcoreMatchMassDrainLatePerSecond,
       };
 
   factory AppIdleConfig.fromJson(Map<String, dynamic>? json) {
@@ -120,6 +171,42 @@ class AppIdleConfig {
         min: 5,
         max: 200,
       ),
+      hardcoreMatchIdleBeforeWarningSeconds: readInt(
+        'hardcoreMatchIdleBeforeWarningSeconds',
+        defaults.hardcoreMatchIdleBeforeWarningSeconds,
+        min: 3,
+        max: 120,
+      ),
+      hardcoreMatchWarningCountdownSeconds: readInt(
+        'hardcoreMatchWarningCountdownSeconds',
+        defaults.hardcoreMatchWarningCountdownSeconds,
+        min: 1,
+        max: 30,
+      ),
+      hardcoreMatchMassDrainPerSecond: readInt(
+        'hardcoreMatchMassDrainPerSecond',
+        defaults.hardcoreMatchMassDrainPerSecond,
+        min: 1,
+        max: 100,
+      ),
+      hardcoreAfkLateGameRadius: readInt(
+        'hardcoreAfkLateGameRadius',
+        defaults.hardcoreAfkLateGameRadius,
+        min: 100,
+        max: 700,
+      ),
+      hardcoreMatchIdleBeforeWarningLateSeconds: readInt(
+        'hardcoreMatchIdleBeforeWarningLateSeconds',
+        defaults.hardcoreMatchIdleBeforeWarningLateSeconds,
+        min: 3,
+        max: 120,
+      ),
+      hardcoreMatchMassDrainLatePerSecond: readInt(
+        'hardcoreMatchMassDrainLatePerSecond',
+        defaults.hardcoreMatchMassDrainLatePerSecond,
+        min: 1,
+        max: 100,
+      ),
     );
   }
 
@@ -130,6 +217,17 @@ class AppIdleConfig {
         matchIdleBeforeWarningSeconds == other.matchIdleBeforeWarningSeconds &&
         matchWarningCountdownSeconds == other.matchWarningCountdownSeconds &&
         matchMassDrainPerSecond == other.matchMassDrainPerSecond &&
-        matchKickMassThreshold == other.matchKickMassThreshold;
+        matchKickMassThreshold == other.matchKickMassThreshold &&
+        hardcoreMatchIdleBeforeWarningSeconds ==
+            other.hardcoreMatchIdleBeforeWarningSeconds &&
+        hardcoreMatchWarningCountdownSeconds ==
+            other.hardcoreMatchWarningCountdownSeconds &&
+        hardcoreMatchMassDrainPerSecond ==
+            other.hardcoreMatchMassDrainPerSecond &&
+        hardcoreAfkLateGameRadius == other.hardcoreAfkLateGameRadius &&
+        hardcoreMatchIdleBeforeWarningLateSeconds ==
+            other.hardcoreMatchIdleBeforeWarningLateSeconds &&
+        hardcoreMatchMassDrainLatePerSecond ==
+            other.hardcoreMatchMassDrainLatePerSecond;
   }
 }

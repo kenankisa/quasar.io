@@ -233,15 +233,16 @@ class RoomTuningService extends ChangeNotifier {
   void _applyRuntimeOverrides() {
     RoomConfig.applyOverrides({
       for (final type in RoomType.values)
-        type: _tuning[type]!.toRoomConfig(type),
+        type: tuningFor(type).toRoomConfig(type),
     });
     MatchPacing.applyOverrides({
       for (final type in RoomType.values)
-        type: _tuning[type]!.toMatchPacing(type),
+        type: tuningFor(type).toMatchPacing(type),
     });
+    // Hardcore is players-only — never publish bot AI overrides for it.
     BotDifficulty.applyOverrides({
       for (final type in RoomType.values)
-        type: _tuning[type]!.toBotDifficulty(type),
+        if (type.allowsBots) type: tuningFor(type).toBotDifficulty(type),
     });
   }
 

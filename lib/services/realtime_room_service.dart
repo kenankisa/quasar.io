@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../game/config/hardcore_rules.dart';
 import '../game/models/bot_sync_state.dart';
 import '../game/models/match_speech.dart';
 import '../game/models/player_sync_state.dart';
@@ -14,6 +15,14 @@ typedef PlayerStateCallback = void Function(PlayerSyncState state);
 typedef BotSnapshotCallback = void Function(BotSnapshot snapshot);
 typedef PlayerIdCallback = void Function(String playerId);
 typedef MatchSpeechCallback = void Function(MatchSpeechEvent event);
+
+/// Hardcore arena phase flip (&lt; min-alive ↔ active).
+typedef HardcoreArenaPhaseCallback = void Function({
+  required bool active,
+  String? phaseAtUtc,
+  String? anchorPlayerId,
+  double? anchorRadius,
+});
 
 /// Fired for remote victory and room-closed broadcasts (same payload shape).
 typedef MatchEndCallback = void Function(
@@ -38,6 +47,7 @@ class RealtimeRoomService {
   RealtimeChannel? _channel;
   String? _localPlayerId;
   String? _roomInstanceId;
+  RoomType? _roomType;
   Future<void>? _leaveInFlight;
   Timer? _memberRefreshTimer;
   final Set<String> _allowedPlayerIds = {};
@@ -47,6 +57,13 @@ class RealtimeRoomService {
   PlayerIdCallback? onPlayerLeft;
   MatchSpeechCallback? onMatchSpeech;
   MatchEndCallback? onRemoteVictory;
+
+  /// Hardcore arena test / sim elim broadcast (`hc_elim`).
+  /// [preyId] was absorbed; peers must despawn immediately.
+  PlayerIdCallback? onHardcoreElim;
+
+  /// Hardcore: arena dropped below / reached min-alive — sync low-pop drain.
+  HardcoreArenaPhaseCallback? onHardcoreArenaPhase;
 
   /// Bir oyuncu bitirdiğinde tüm oda kapanır — her istemciye yayınlanır.
   MatchEndCallback? onRoomClosed;
@@ -73,6 +90,7 @@ class RealtimeRoomService {
 
     _localPlayerId = authId;
     _roomInstanceId = roomInstanceId;
+    _roomType = roomType;
     _allowedPlayerIds
       ..clear()
       ..add(authId);
@@ -90,11 +108,15 @@ class RealtimeRoomService {
         .onBroadcast(
           event: 'player_state',
           callback: (payload) {
-            final map = Map<String, dynamic>.from(payload);
-            final state = PlayerSyncState.fromMap(map);
-            if (state.id == _localPlayerId) return;
-            if (!_isAllowedMember(state.id)) return;
-            onPlayerState?.call(state);
+            try {
+              final map = Map<String, dynamic>.from(payload);
+              final state = PlayerSyncState.fromMap(map);
+              if (state.id == _localPlayerId) return;
+              if (!_isAllowedMember(state.id)) return;
+              onPlayerState?.call(state);
+            } catch (_) {
+              // Malformed peer pose (null id etc.) — ignore.
+            }
           },
         )
         .onBroadcast(
@@ -113,8 +135,38 @@ class RealtimeRoomService {
           callback: (payload) {
             final id = payload['id'] as String?;
             if (id == null || id == _localPlayerId) return;
-            if (!_isAllowedMember(id)) return;
+            // Do not require allowlist: leavers often drop from members first,
+            // and peers must still despawn their hole.
+            _allowedPlayerIds.remove(id);
             onPlayerLeft?.call(id);
+          },
+        )
+        .onBroadcast(
+          event: 'hc_elim',
+          callback: (payload) {
+            final preyId = payload['prey_id'] as String?;
+            if (preyId == null || preyId.isEmpty) return;
+            _allowedPlayerIds.remove(preyId);
+            onHardcoreElim?.call(preyId);
+          },
+        )
+        .onBroadcast(
+          event: 'hc_arena_phase',
+          callback: (payload) {
+            if (_roomType != RoomType.hardcore) return;
+            final map = Map<String, dynamic>.from(payload);
+            final active = map['active'] == true;
+            final phaseAt = map['phase_at'] as String?;
+            if (!active && (phaseAt == null || phaseAt.isEmpty)) return;
+            final anchorId = map['anchor_player_id'] as String?;
+            final anchorRadius = (map['anchor_radius'] as num?)?.toDouble();
+            onHardcoreArenaPhase?.call(
+              active: active,
+              phaseAtUtc: phaseAt,
+              anchorPlayerId:
+                  anchorId != null && anchorId.isNotEmpty ? anchorId : null,
+              anchorRadius: anchorRadius,
+            );
           },
         )
         .onBroadcast(
@@ -129,6 +181,21 @@ class RealtimeRoomService {
             final winnerRankPoints = map['rank_points'] as int? ??
                 map['diamonds'] as int?;
             if (winnerId == _localPlayerId) return;
+            // Hardcore: winner leaves membership in the same tick — still
+            // despawn their hole if they authenticated their own claim.
+            if (_roomType == RoomType.hardcore &&
+                senderId == winnerId &&
+                winnerId.isNotEmpty) {
+              _allowedPlayerIds.remove(winnerId);
+              onRemoteVictory?.call(
+                winnerId,
+                winnerName,
+                elapsed,
+                isBot,
+                winnerRankPoints: winnerRankPoints,
+              );
+              return;
+            }
             if (!_isAllowedMatchEnd(
               winnerId: winnerId,
               isBot: isBot,
@@ -199,6 +266,49 @@ class RealtimeRoomService {
     );
   }
 
+  /// Hardcore: prey must leave the map on every client (incl. arena-test sims).
+  void broadcastHardcoreElim({required String preyId}) {
+    final uid = _authUidOrNull();
+    if (uid == null || preyId.isEmpty || preyId == uid) return;
+    _channel?.sendBroadcastMessage(
+      event: 'hc_elim',
+      payload: {
+        'predator_id': uid,
+        'prey_id': preyId,
+      },
+    );
+  }
+
+  /// Hardcore: min-alive phase flip — peers align low-pop drain to server UTC.
+  void broadcastHardcoreArenaPhase({
+    required bool active,
+    String? phaseAtUtc,
+    String? anchorPlayerId,
+    double? anchorRadius,
+  }) {
+    if (_roomType != RoomType.hardcore) return;
+    final uid = _authUidOrNull();
+    if (uid == null) return;
+    final payload = <String, dynamic>{
+      'active': active,
+      'sender_id': uid,
+    };
+    if (!active) {
+      payload['phase_at'] = phaseAtUtc ?? DateTime.now().toUtc().toIso8601String();
+      if (anchorPlayerId != null &&
+          anchorPlayerId.isNotEmpty &&
+          anchorRadius != null &&
+          anchorRadius > 0) {
+        payload['anchor_player_id'] = anchorPlayerId;
+        payload['anchor_radius'] = anchorRadius;
+      }
+    }
+    _channel?.sendBroadcastMessage(
+      event: 'hc_arena_phase',
+      payload: payload,
+    );
+  }
+
   void broadcastState(PlayerSyncState state) {
     final uid = _authUidOrNull();
     if (uid == null || state.id != uid) return;
@@ -240,6 +350,7 @@ class RealtimeRoomService {
     required String playerName,
     required double elapsedSeconds,
     int? rankPoints,
+    bool closeRoom = true,
   }) {
     final uid = _authUidOrNull();
     if (uid == null || playerId != uid) return;
@@ -254,11 +365,13 @@ class RealtimeRoomService {
       event: 'universe_victory',
       payload: payload,
     );
-    // Oda kapanır: tüm oyuncular maçı bitirir.
-    _channel?.sendBroadcastMessage(
-      event: 'room_closed',
-      payload: payload,
-    );
+    // Hardcore stays open — only the winner leaves; peers keep playing.
+    if (closeRoom) {
+      _channel?.sendBroadcastMessage(
+        event: 'room_closed',
+        payload: payload,
+      );
+    }
   }
 
   void broadcastRoomClosed({
@@ -316,10 +429,14 @@ class RealtimeRoomService {
 
   Future<void> leaveRoom() async {
     _stopMemberRefresh();
+    if (_roomType == RoomType.hardcore) {
+      HardcoreArenaAliveHint.clear();
+    }
     if (_channel == null) {
       _allowedPlayerIds.clear();
       _roomInstanceId = null;
       _localPlayerId = null;
+      _roomType = null;
       return;
     }
     if (_leaveInFlight != null) {
@@ -344,6 +461,7 @@ class RealtimeRoomService {
       _channel = null;
       _localPlayerId = null;
       _roomInstanceId = null;
+      _roomType = null;
       _allowedPlayerIds.clear();
     }
   }
@@ -405,10 +523,22 @@ class RealtimeRoomService {
       final ids =
           await RoomMatchmakingService.instance.listActiveMemberIds(roomId);
       if (_roomInstanceId != roomId) return;
+      final previous = Set<String>.from(_allowedPlayerIds);
       _allowedPlayerIds
         ..clear()
         ..add(local)
         ..addAll(ids);
+      // Hardcore softcap / arena-active: DB headcount beats lossy peer sightings.
+      if (_roomType == RoomType.hardcore) {
+        HardcoreArenaAliveHint.setMembers(_allowedPlayerIds.length);
+      }
+      // Seat released (elim / leave) → purge ghost holes even if player_left
+      // or absorb broadcast was missed.
+      for (final id in previous) {
+        if (id == local) continue;
+        if (_allowedPlayerIds.contains(id)) continue;
+        onPlayerLeft?.call(id);
+      }
     } catch (e, st) {
       debugPrint('RealtimeRoomService member refresh: $e\n$st');
     }

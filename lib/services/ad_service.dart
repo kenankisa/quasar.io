@@ -43,6 +43,15 @@ class AdService {
   Future<void> init() async {
     if (_initialized || !adsSupported) return;
 
+    if (kDebugMode) {
+      final unit = _doubleAdUnitId;
+      final mode = AppConfig.isUsingTestAdMobIds ? 'TEST' : 'PROD';
+      final preview = unit.length > 28
+          ? '${unit.substring(0, 22)}…${unit.substring(unit.length - 6)}'
+          : unit;
+      debugPrint('AdService: 2× unit [$mode] $preview');
+    }
+
     try {
       await MobileAds.instance.initialize();
       _initialized = true;
@@ -51,6 +60,12 @@ class AdService {
       debugPrint('AdService init failed: $e\n$stackTrace');
     }
     await _preloadRewardedAd(_doubleAdUnitId);
+  }
+
+  /// True when the active 2× unit is still a Google sample id.
+  bool get isUsingTestDoubleAdUnit {
+    final id = _doubleAdUnitId;
+    return id.contains('3940256099942544');
   }
 
   Future<bool> _preloadRewardedAd(String adUnitId) async {

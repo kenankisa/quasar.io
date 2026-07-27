@@ -61,7 +61,7 @@ class GravityConsumablePaint {
       _streamFrameStamp = frameStamp;
       _streamsThisFrame = 0;
     }
-    final cap = CanvasEffects.mobileLiteMode ? 3 : 6;
+    final cap = CanvasEffects.economyMode ? 3 : 6;
     if (_streamsThisFrame >= cap) return false;
     _streamsThisFrame++;
     return true;
@@ -387,7 +387,7 @@ class GravityConsumablePaint {
         ).createShader(Rect.fromLTWH(r * 0.18, -r, tipX - r * 0.18, r * 2)),
     );
 
-    if (!CanvasEffects.mobileLiteMode && strength > 0.3) {
+    if (!CanvasEffects.economyMode && strength > 0.3) {
       // Incandescent rim on the stripped hemisphere.
       canvas.drawArc(
         Rect.fromCircle(center: Offset.zero, radius: r * 0.98),
@@ -453,7 +453,7 @@ class GravityConsumablePaint {
     final len = endX - startX;
     if (len < entityRadius * 0.6) return;
 
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final pop = CanvasEffects.visualPopMultiplier;
     // Reference Stage 2-3: wide flame-like fan off the Roche lobe that
     // narrows into a filament and hooks tangentially into the disk edge.
@@ -581,7 +581,7 @@ class GravityConsumablePaint {
         baseWidth *
         0.18 *
         lodScale;
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
 
     // Outer volumetric sheath — soft, wide.
     _drawTidalStreamRibbon(
@@ -829,7 +829,7 @@ class GravityConsumablePaint {
     required Color bodyColor,
     double lod = 1.0,
   }) {
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
     final chunkCount = lite
         ? (2 + (tidal.fragmentLevel * 3).round())
         : (3 + (tidal.fragmentLevel * 5).round()).clamp(3, 8);

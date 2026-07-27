@@ -37,6 +37,18 @@ class LobbyChatMessage {
   final String userName;
   final String text;
   final DateTime sentAt;
+
+  /// HH:mm — lobi sohbet satırında gösterim.
+  String get timeLabel {
+    final t = sentAt.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(t.hour)}:${two(t.minute)}';
+  }
+
+  bool isExpired(Duration ttl, [DateTime? now]) {
+    final anchor = now ?? DateTime.now();
+    return anchor.difference(sentAt) >= ttl;
+  }
 }
 
 /// Global lobby chat — sunucu `send_lobby_chat` + Realtime (kimlik spoof yok).
@@ -47,8 +59,11 @@ class LobbyChatService extends ChangeNotifier {
   static const maxMessageLength = 120;
   static const maxStoredMessages = 40;
   static const sendCooldown = Duration(milliseconds: 900);
+  static const messageTtl = Duration(minutes: 30);
+  static const _expirySweepInterval = Duration(seconds: 30);
 
   RealtimeChannel? _channel;
+  Timer? _expiryTimer;
   Future<void>? _operation;
   DateTime? _lastSendAt;
   bool _sending = false;
@@ -75,12 +90,24 @@ class LobbyChatService extends ChangeNotifier {
                 if (map.isEmpty) return;
                 _push(LobbyChatMessage.fromMap(Map<String, dynamic>.from(map)));
               },
+            )
+            .onPostgresChanges(
+              event: PostgresChangeEvent.delete,
+              schema: 'public',
+              table: 'lobby_chat_messages',
+              callback: (payload) {
+                final id = payload.oldRecord['id'] as String?;
+                if (id == null || id.isEmpty) return;
+                _removeById(id);
+              },
             );
         _channel = channel;
         channel.subscribe();
+        _startExpiryTimer();
       });
 
   Future<void> detach() => _run(() async {
+        _stopExpiryTimer();
         final channel = _channel;
         _channel = null;
         _messages.clear();
@@ -146,9 +173,17 @@ class LobbyChatService extends ChangeNotifier {
 
   Future<void> _loadRecent() async {
     try {
+      unawaited(
+        _client.rpc('purge_stale_lobby_chat').catchError((Object e, StackTrace st) {
+          debugPrint('LobbyChatService purge: $e\n$st');
+        }),
+      );
+
+      final cutoff = DateTime.now().toUtc().subtract(messageTtl).toIso8601String();
       final rows = await _client
           .from('lobby_chat_messages')
           .select('id, user_id, username, body, created_at')
+          .gte('created_at', cutoff)
           .order('created_at', ascending: false)
           .limit(maxStoredMessages);
       final parsed = rows
@@ -167,12 +202,40 @@ class LobbyChatService extends ChangeNotifier {
 
   void _push(LobbyChatMessage msg) {
     if (msg.id.isEmpty || msg.text.isEmpty || msg.userId.isEmpty) return;
+    if (msg.isExpired(messageTtl)) return;
     if (_messages.any((m) => m.id == msg.id)) return;
     _messages.add(msg);
+    _trimOverflow();
+    notifyListeners();
+  }
+
+  void _removeById(String id) {
+    final before = _messages.length;
+    _messages.removeWhere((m) => m.id == id);
+    if (_messages.length != before) notifyListeners();
+  }
+
+  void _trimOverflow() {
+    _pruneExpired();
     while (_messages.length > maxStoredMessages) {
       _messages.removeAt(0);
     }
-    notifyListeners();
+  }
+
+  void _pruneExpired() {
+    final before = _messages.length;
+    _messages.removeWhere((m) => m.isExpired(messageTtl));
+    if (_messages.length != before) notifyListeners();
+  }
+
+  void _startExpiryTimer() {
+    _expiryTimer?.cancel();
+    _expiryTimer = Timer.periodic(_expirySweepInterval, (_) => _pruneExpired());
+  }
+
+  void _stopExpiryTimer() {
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
   }
 
   Future<void> _run(Future<void> Function() action) async {

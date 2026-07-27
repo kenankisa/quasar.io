@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../game/models/admin_message.dart';
 import '../services/lang_service.dart';
@@ -92,7 +93,7 @@ class _PlayerMessagesDialogState extends State<PlayerMessagesDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
 
     return ListenableBuilder(
       listenable: Listenable.merge([_service, lang]),
@@ -172,7 +173,7 @@ class _InboxList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
 
     if (service.error != null) {
       return Center(
@@ -240,7 +241,7 @@ class _ComposeForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
 
     return SingleChildScrollView(
       child: Column(
@@ -344,7 +345,7 @@ class _PlayerThreadDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final thread = detail.thread;
     final canReply = thread.category != MessageCategory.broadcast;
 
@@ -503,7 +504,7 @@ class _PlayerThreadTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final unread = thread.hasUnread;
 
     return Material(

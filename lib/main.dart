@@ -11,21 +11,24 @@ import 'services/audio_service.dart';
 import 'services/auth_service.dart';
 import 'services/lang_service.dart';
 import 'services/room_tuning_service.dart';
+import 'services/app_economy_config_service.dart';
 import 'services/app_idle_config_service.dart';
 import 'services/app_rank_config_service.dart';
 import 'services/secure_session_storage.dart';
 import 'services/settings_service.dart';
 import 'utils/app_lifecycle.dart';
 import 'utils/app_navigator.dart';
+import 'utils/lang_rebuild.dart';
+import 'utils/lang_scope.dart';
 import 'utils/responsive_layout.dart';
 import 'services/admin_access.dart';
-import 'services/ad_service.dart';
 import 'services/player_session_service.dart';
 import 'widgets/idle_session_warning_overlay.dart';
 import 'widgets/live_announcement_overlay.dart';
 import 'widgets/lobby_screen.dart';
 import 'widgets/login_screen.dart';
 import 'services/live_announcement_service.dart';
+import 'services/server_clock_service.dart';
 
 final _appTheme = ThemeData(
   brightness: Brightness.dark,
@@ -87,6 +90,19 @@ Future<void> main() async {
     return;
   }
 
+  // Pre-store: allow test AdMob in release/profile; warn only.
+  // Re-harden (StartupErrorApp) before Play Store when using real units.
+  if (!kDebugMode &&
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS) &&
+      AppConfig.isUsingTestAdMobIds) {
+    debugPrint(
+      'WARNING: AdMob still using Google TEST ids. '
+      'OK for internal builds — switch to dart_defines.prod.json before store.',
+    );
+  }
+
   try {
     await Supabase.initialize(
       url: AppConfig.supabaseUrl,
@@ -145,15 +161,16 @@ Future<void> _bootstrapServices() async {
         debugPrint('AppRankConfigService init: $e\n$st');
       }),
     );
-    // Google Sign-In and AdMob init lazily on first use — avoids native startup crashes.
+    unawaited(
+      AppEconomyConfigService.instance.init().catchError((Object e, StackTrace st) {
+        debugPrint('AppEconomyConfigService init: $e\n$st');
+      }),
+    );
+    // Google Sign-In + AdMob stay lazy (first sign-in / first ad) so a flaky
+    // Play Services / Ads native path cannot kill the process on cold start.
     unawaited(
       AuthService.instance.init().catchError((Object e, StackTrace st) {
         debugPrint('AuthService init: $e\n$st');
-      }),
-    );
-    unawaited(
-      AdService.instance.init().catchError((Object e, StackTrace st) {
-        debugPrint('AdService init: $e\n$st');
       }),
     );
   } catch (e, stackTrace) {
@@ -222,10 +239,9 @@ class _QuasarAppState extends State<QuasarApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: LanguageService.instance,
-      builder: (context, _) {
-        return Listener(
+    return LanguageScope(
+      child: LangRebuild(
+        child: Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: (_) {
             PlayerSessionService.instance.noteActivity();
@@ -236,16 +252,19 @@ class _QuasarAppState extends State<QuasarApp> with WidgetsBindingObserver {
             debugShowCheckedModeBanner: false,
             navigatorKey: appNavigatorKey,
             builder: (context, child) {
-              final sized = responsiveAppBuilder(context, child);
-              return LiveAnnouncementOverlay(
-                child: IdleSessionWarningOverlay(child: sized),
+              return LangRebuild(
+                child: LiveAnnouncementOverlay(
+                  child: IdleSessionWarningOverlay(
+                    child: responsiveAppBuilder(context, child),
+                  ),
+                ),
               );
             },
             theme: _appTheme,
             home: const AuthGate(),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -259,6 +278,39 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   String? _boundUserId;
+  Timer? _logoutDebounce;
+
+  static const _logoutGrace = Duration(milliseconds: 900);
+
+  @override
+  void dispose() {
+    _logoutDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleLogoutCleanup() {
+    if (_logoutDebounce?.isActive ?? false) return;
+    _logoutDebounce?.cancel();
+    _logoutDebounce = Timer(_logoutGrace, () {
+      if (!mounted) return;
+      // Session came back during grace — stay signed in.
+      if (Supabase.instance.client.auth.currentSession != null) return;
+      final hadUser = _boundUserId != null;
+      _boundUserId = null;
+      if (!hadUser) return;
+      AdminAccess.clearCache();
+      popAppToRoot();
+      unawaited(PlayerSessionService.instance.release());
+      unawaited(LiveAnnouncementService.instance.detach());
+      ServerClockService.instance.detach();
+      setState(() {});
+    });
+  }
+
+  void _cancelLogoutCleanup() {
+    _logoutDebounce?.cancel();
+    _logoutDebounce = null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -270,11 +322,13 @@ class _AuthGateState extends State<AuthGate> {
         final userId = session?.user.id;
 
         if (userId != null) {
+          _cancelLogoutCleanup();
           if (_boundUserId != userId) {
             _boundUserId = userId;
             WidgetsBinding.instance.addPostFrameCallback((_) {
               unawaited(AdminAccess.refreshAdminStatus());
               unawaited(PlayerSessionService.instance.ensureAppSession());
+              ServerClockService.instance.attach();
               unawaited(LiveAnnouncementService.instance.attach());
             });
           }
@@ -282,14 +336,11 @@ class _AuthGateState extends State<AuthGate> {
           return const LobbyScreen();
         }
 
+        // Brief null sessions (token recover / refresh) must not pop AdminScreen.
         if (_boundUserId != null) {
-          _boundUserId = null;
-          AdminAccess.clearCache();
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            popAppToRoot();
-            unawaited(PlayerSessionService.instance.release());
-            unawaited(LiveAnnouncementService.instance.detach());
-          });
+          _scheduleLogoutCleanup();
+          // Keep lobby (and pushed AdminScreen) mounted during grace.
+          return const LobbyScreen();
         }
         return const LoginScreen();
       },

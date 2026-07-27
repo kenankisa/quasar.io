@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../utils/lang_rebuild.dart';
+
 /// Blurred cosmic dialog shell used across settings screens.
 class CosmicDialog {
   CosmicDialog._();
@@ -17,7 +19,9 @@ class CosmicDialog {
       barrierLabel: barrierLabel,
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 260),
-      pageBuilder: (context, animation, secondaryAnimation) => child,
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return LangRebuild(child: child);
+      },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curve = CurvedAnimation(
           parent: animation,

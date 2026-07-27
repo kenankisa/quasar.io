@@ -11,10 +11,11 @@ import '../utils/consumable_tidal_spin.dart';
 import '../utils/cosmic_body_renderer.dart';
 import '../utils/gravity_visual.dart';
 import '../utils/viewport_cull.dart';
+import 'gravity_matter.dart';
 
 /// Collectible quasar fragment — growth size 5 (unique rooms).
 /// Compact accretion-disk look: hot core + thin tilted disk + subtle jets.
-class QuasarFragment extends PositionComponent {
+class QuasarFragment extends PositionComponent implements GravityMatter {
   QuasarFragment({
     required Vector2 position,
     this.collisionRadius = 15,
@@ -27,10 +28,13 @@ class QuasarFragment extends PositionComponent {
          size: Vector2.all(collisionRadius * 3.6),
        );
 
+  @override
   final double collisionRadius;
   final double growthValue;
+  @override
   final Vector2 velocity;
 
+  @override
   bool active = true;
   double _spin = 0;
   double _pulse = 0;
@@ -141,7 +145,7 @@ class QuasarFragment extends PositionComponent {
     RoomVisualTheme theme, {
     required double spin,
   }) {
-    if (CanvasEffects.mobileLiteMode) {
+    if (CanvasEffects.economyMode) {
       canvas.save();
       canvas.rotate(0.5);
       canvas.scale(1.0, 0.35);

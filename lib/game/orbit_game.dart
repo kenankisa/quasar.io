@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 
 import '../services/realtime_room_service.dart';
 import '../services/room_matchmaking_service.dart';
-import '../services/room_tuning_service.dart';
 import '../services/lang_service.dart';
 import '../services/settings_service.dart';
 import 'models/room_instance.dart';
@@ -32,6 +31,7 @@ import 'components/universe_edge_veil.dart';
 import 'components/void_camera_backdrop.dart';
 import 'models/room_leaderboard.dart';
 import 'systems/camera_system.dart';
+import 'systems/hole_spatial_index.dart';
 import 'systems/input_steering_system.dart';
 import 'systems/match_lifecycle_system.dart';
 import 'systems/network_sync_system.dart';
@@ -41,7 +41,8 @@ import 'utils/entity_status_mixins.dart';
 import 'config/room_config.dart';
 import 'config/bot_difficulty.dart';
 import 'config/first_match_tuning.dart';
-import 'config/match_pacing.dart';
+import 'config/interactive_tutorial.dart';
+import 'config/match_rules.dart';
 import 'config/skill_tree_config.dart';
 import 'match_phase.dart';
 import 'room_type.dart';
@@ -70,10 +71,17 @@ class OrbitGame extends FlameGame with PanDetector {
          tutorialCompleted: tutorialCompletedAtStart,
          gamesWon: gamesWonAtStart,
        ),
+       interactiveTutorial = InteractiveTutorialController(
+         isActive: FirstMatchTuning.shouldShowHints(
+           FirstMatchTuning.isFirstMatch(
+             tutorialCompleted: tutorialCompletedAtStart,
+             gamesWon: gamesWonAtStart,
+           ),
+         ),
+       ),
        initialRealPlayerCount = roomInstance?.realPlayerCount ?? 1;
 
-  double get universeVictoryRadius =>
-      RoomTuningService.instance.tuningFor(roomType).victoryRadius;
+  double get universeVictoryRadius => matchRules.tuning.victoryRadius;
 
   /// Maç, yarıçap evren zafer eşiğine ulaştığında veya geçtiğinde biter (500 / 550).
   bool hasUniverseVictory(double radius) => radius >= universeVictoryRadius;
@@ -102,6 +110,7 @@ class OrbitGame extends FlameGame with PanDetector {
   final int gamesWonAtStart;
   final bool tutorialCompletedAtStart;
   final bool isFirstMatchExperience;
+  final InteractiveTutorialController interactiveTutorial;
   final AbilityLoadout abilityLoadout;
   final RoomInstance? roomInstance;
   final int initialRealPlayerCount;
@@ -148,7 +157,7 @@ class OrbitGame extends FlameGame with PanDetector {
       (network.forceBotAuthority || electedBotHostId == playerId);
 
   BotDifficulty get effectiveBotDifficulty => FirstMatchTuning.adjustBotDifficulty(
-        BotDifficulty.forRoom(roomType),
+        matchRules.bots,
         roomType: roomType,
         isFirstMatch: isFirstMatchExperience,
       );
@@ -166,7 +175,9 @@ class OrbitGame extends FlameGame with PanDetector {
   late final HoleSwallowManager holeSwallowManager;
   late final TacticalZoneManager tacticalManager;
   late final CosmicEventManager eventManager;
+  late final MatchRules matchRules;
   late final RoomConfig roomConfig;
+  late final HoleSpatialIndex holeIndex;
   late final double worldSize;
 
   final Map<String, EnemyPlayer> enemyPlayersById = {};
@@ -177,6 +188,7 @@ class OrbitGame extends FlameGame with PanDetector {
   Iterable<EnemyPlayer> get enemyPlayers => enemyPlayersById.values;
 
   final List<({Vector2 position, double radius})> _gravitySourcesCache = [];
+  int _gravitySourcesCachedCount = -1;
 
   /// Alive humans in the room (local + remote).
   int get aliveRealPlayerCount {
@@ -195,9 +207,23 @@ class OrbitGame extends FlameGame with PanDetector {
   }
 
   /// All black holes that exert Newtonian gravity on matter and each other.
-  /// Rebuilt once per [update] — safe to call from every consumable render.
+  /// Synced once per [update]; positions follow live [Vector2] refs.
   List<({Vector2 position, double radius})> activeGravitySources() =>
       _gravitySourcesCache;
+
+  int _activeGravitySourceCount() {
+    var count = 0;
+    if (!player.isEliminated) count++;
+    if (isReady) {
+      for (final bot in botPopulation.bots) {
+        if (!bot.isEliminated) count++;
+      }
+    }
+    for (final enemy in enemyPlayersById.values) {
+      if (!enemy.isEliminated) count++;
+    }
+    return count;
+  }
 
   void _rebuildGravitySourcesCache() {
     _gravitySourcesCache.clear();
@@ -220,6 +246,89 @@ class OrbitGame extends FlameGame with PanDetector {
         (position: enemy.position, radius: enemy.radius),
       );
     }
+    _gravitySourcesCachedCount = _gravitySourcesCache.length;
+  }
+
+  void _syncHoleSpatialIndex() {
+    final snapshots = <HoleSnapshot>[];
+    if (!player.isEliminated) {
+      snapshots.add(
+        HoleSnapshot(
+          partner: player,
+          position: player.position,
+          radius: player.radius,
+          isLocalPlayer: true,
+        ),
+      );
+    }
+    if (isReady) {
+      for (final bot in botPopulation.bots) {
+        if (bot.isEliminated) continue;
+        snapshots.add(
+          HoleSnapshot(
+            partner: bot,
+            position: bot.position,
+            radius: bot.radius,
+            accent: bot.accentColor,
+          ),
+        );
+      }
+    }
+    for (final enemy in enemyPlayersById.values) {
+      if (enemy.isEliminated) continue;
+      snapshots.add(
+        HoleSnapshot(
+          partner: enemy,
+          position: enemy.position,
+          radius: enemy.radius,
+          accent: const Color(0xFF5599EE),
+        ),
+      );
+    }
+    holeIndex.rebuild(snapshots);
+  }
+
+  /// Positions stay fresh via [Vector2] refs; radii are copied each sync.
+  void _refreshGravitySourceRadii() {
+    var i = 0;
+    if (!player.isEliminated) {
+      final entry = _gravitySourcesCache[i];
+      if (entry.radius != player.radius) {
+        _gravitySourcesCache[i] =
+            (position: entry.position, radius: player.radius);
+      }
+      i++;
+    }
+    if (isReady) {
+      for (final bot in botPopulation.bots) {
+        if (bot.isEliminated) continue;
+        final entry = _gravitySourcesCache[i];
+        if (entry.radius != bot.radius) {
+          _gravitySourcesCache[i] =
+              (position: entry.position, radius: bot.radius);
+        }
+        i++;
+      }
+    }
+    for (final enemy in enemyPlayersById.values) {
+      if (enemy.isEliminated) continue;
+      final entry = _gravitySourcesCache[i];
+      if (entry.radius != enemy.radius) {
+        _gravitySourcesCache[i] =
+            (position: entry.position, radius: enemy.radius);
+      }
+      i++;
+    }
+  }
+
+  void _syncGravitySourcesCache() {
+    final count = _activeGravitySourceCount();
+    if (count != _gravitySourcesCachedCount) {
+      _rebuildGravitySourcesCache();
+      return;
+    }
+    if (count == 0) return;
+    _refreshGravitySourceRadii();
   }
 
   /// Live room standings for the top HUD — always shows names and ranks.
@@ -277,6 +386,7 @@ class OrbitGame extends FlameGame with PanDetector {
 
   double _matchElapsed = 0;
   double get matchElapsed => _matchElapsed;
+  bool _tutorialBoostUsed = false;
   double? victoryElapsed;
 
   /// Oda kapandığında yerel oyuncunun sırası (1 = birincilik). Elemede null.
@@ -363,6 +473,7 @@ class OrbitGame extends FlameGame with PanDetector {
         RoomType.normal => const Color(0xFF010104),
         RoomType.elite => const Color(0xFF030308),
         RoomType.unique => const Color(0xFF040510),
+        RoomType.hardcore => const Color(0xFF100408),
       };
 
   @override
@@ -371,14 +482,15 @@ class OrbitGame extends FlameGame with PanDetector {
 
     await BlackHoleShaderService.preload();
 
-    roomConfig = RoomConfig.forRoom(roomType);
+    matchRules = MatchRules.forRoom(roomType);
+    roomConfig = matchRules.room;
     worldSize = roomConfig.worldSize;
+    holeIndex = HoleSpatialIndex(worldSize: worldSize);
 
     await world.add(StarfieldBackground(roomType: roomType));
     await world.add(UniverseEdgeVeil(roomType: roomType));
 
-    final startRadius =
-        RoomTuningService.instance.tuningFor(roomType).playerStartRadius;
+    final startRadius = matchRules.tuning.playerStartRadius;
     maxRadiusReached = startRadius;
     player = Player(
       activeSkin: activeSkin,
@@ -799,7 +911,8 @@ class OrbitGame extends FlameGame with PanDetector {
     dt = dt.clamp(0.0, 1 / 20);
     if (!isReady) return;
 
-    _rebuildGravitySourcesCache();
+    _syncGravitySourcesCache();
+    _syncHoleSpatialIndex();
 
     if (isMatchEnded) {
       _tickHud(dt);
@@ -823,6 +936,7 @@ class OrbitGame extends FlameGame with PanDetector {
       player.tickStatus(dt);
       maxRadiusReached = math.max(maxRadiusReached, player.radius);
       input.tick(dt);
+      _tickInteractiveTutorial();
     }
     // Velocity integration runs in component update — apply gravity accelerations first.
     spawnManager.applyGravityPull(dt);
@@ -978,6 +1092,24 @@ class OrbitGame extends FlameGame with PanDetector {
 
   double _hudTimer = 0;
 
+  void _tickInteractiveTutorial() {
+    if (!interactiveTutorial.isActive || player.isEliminated) return;
+    interactiveTutorial.tick(
+      matchElapsed: matchElapsed,
+      playerRadius: player.radius,
+      isDragging: input.isHoleDragActive,
+      velocity: player.velocity.length,
+      boostActive: player.isBoostActive,
+      boostUsed: _tutorialBoostUsed,
+      onPrimeBoost: () {
+        player.boostEnergy = 1.0;
+      },
+    );
+    if (player.isBoostActive) {
+      _tutorialBoostUsed = true;
+    }
+  }
+
   void _tickHud(double dt) {
     _hudTimer += dt;
     final boostBusy = !player.isEliminated &&
@@ -1033,7 +1165,7 @@ class OrbitGame extends FlameGame with PanDetector {
       return;
     }
 
-    final pacing = MatchPacing.forRoom(roomType);
+    final pacing = matchRules.pacing;
     final shrinkRate = player.radius >= pacing.lateGameRadiationRadius
         ? pacing.lateGameRadiationShrinkPerSecond
         : 1.0;

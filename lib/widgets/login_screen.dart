@@ -6,6 +6,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../config/app_version.dart';
 import '../services/auth_service.dart';
 import '../services/lang_service.dart';
+import '../utils/lang_rebuild.dart';
+import '../utils/lang_scope.dart';
 import '../services/player_session_service.dart';
 import '../services/settings_service.dart';
 import '../utils/app_lifecycle.dart';
@@ -22,12 +24,15 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen>
-    with TickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver, LangChangeListener {
   late final AnimationController _particleController;
   late final AnimationController _glowController;
   late final AnimationController _enterController;
   bool _isSigningIn = false;
   String? _errorMessage;
+
+  @override
+  void onLangChanged() => setState(() {});
 
   @override
   void initState() {
@@ -88,8 +93,7 @@ class _LoginScreenState extends State<LoginScreen>
           await AuthService.instance.signOut();
           if (mounted) {
             setState(() {
-              _errorMessage =
-                  LanguageService.instance.t('player_already_active_message');
+              _errorMessage = context.lang.t('player_already_active_message');
             });
           }
           return;
@@ -102,13 +106,13 @@ class _LoginScreenState extends State<LoginScreen>
     } on GoogleSignInException catch (e) {
       if (e.code != GoogleSignInExceptionCode.canceled && mounted) {
         setState(
-          () => _errorMessage = LanguageService.instance.t('sign_in_error'),
+          () => _errorMessage = context.lang.t('sign_in_error'),
         );
       }
     } catch (e) {
       if (!AuthService.instance.isSignedIn && mounted) {
         setState(
-          () => _errorMessage = LanguageService.instance.t('sign_in_error'),
+          () => _errorMessage = context.lang.t('sign_in_error'),
         );
       }
     } finally {
@@ -117,15 +121,18 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   void _showLanguagePicker() {
-    final lang = LanguageService.instance;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF0A0A1A),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
-        return SafeArea(
+      builder: (sheetContext) {
+        return LangRebuild(
+          child: Builder(
+            builder: (context) {
+              final lang = context.lang;
+              return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -177,13 +184,16 @@ class _LoginScreenState extends State<LoginScreen>
             ],
           ),
         );
+            },
+          ),
+        );
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final size = MediaQuery.sizeOf(context);
     final r = ResponsiveLayout.of(context);
     final enter = CurvedAnimation(
@@ -377,7 +387,7 @@ class _LoginBrandHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final r = responsive;
 
     return Padding(

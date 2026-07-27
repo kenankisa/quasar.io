@@ -10,7 +10,6 @@ import 'black_hole_partner.dart';
 import '../../utils/player_name.dart';
 
 import '../../services/settings_service.dart';
-import '../config/match_pacing.dart';
 import '../config/skill_tree_config.dart';
 import '../orbit_game.dart';
 import '../utils/black_hole_avatar_loader.dart';
@@ -267,7 +266,7 @@ class Player extends PositionComponent
 
     final game = findGame() as OrbitGame?;
     if (game != null) {
-      final pacing = MatchPacing.forRoom(game.roomType);
+      final pacing = game.matchRules.pacing;
       final radiationStart = pacing.radiationRadius;
       final idleSeconds = radius >= pacing.lateGameRadiationRadius
           ? pacing.lateGameRadiationIdleSeconds

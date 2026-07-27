@@ -1,3 +1,5 @@
+import '../room_type.dart';
+
 /// Çok oyunculu evren oda atama kuralları.
 class RoomMatchmaking {
   const RoomMatchmaking._();
@@ -13,8 +15,19 @@ class RoomMatchmaking {
   /// Gerçek oyuncu + bot toplam hedefi (10+10 doluyken).
   static const roomEntityCapacity = 20;
 
+  /// Hardcore tek evren — admin tuning ile 0–100.
+  static const hardcoreDefaultMaxPlayers = 20;
+
+  /// Hardcore dışı odalarda lider yarıçapı kilidi uygulanır.
+  static bool appliesLeaderJoinLock(RoomType roomType) =>
+      roomType != RoomType.hardcore;
+
   /// [realPlayers] için kaç bot spawn edilmeli.
-  static int botCountFor(int realPlayers) {
+  static int botCountFor(
+    int realPlayers, {
+    required RoomType roomType,
+  }) {
+    if (!roomType.allowsBots) return 0;
     final real = realPlayers.clamp(0, maxRealPlayersPerRoom);
     return (roomEntityCapacity - real).clamp(0, roomEntityCapacity);
   }
@@ -23,7 +36,13 @@ class RoomMatchmaking {
   static const trainingBotsPerSession = roomEntityCapacity - 1;
 
   /// Lobide toplam oyuncu kapasitesi (açık evren × oda tavanı).
-  static int playerCapacityForUniverses(int activeUniverses) {
+  static int playerCapacityForUniverses(
+    int activeUniverses, {
+    RoomType type = RoomType.normal,
+  }) {
+    if (type == RoomType.hardcore) {
+      return hardcoreDefaultMaxPlayers;
+    }
     final universes = activeUniverses < 1 ? 1 : activeUniverses;
     return universes * maxRealPlayersPerRoom;
   }

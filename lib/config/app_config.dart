@@ -66,12 +66,17 @@ class AppConfig {
     defaultValue: 'ca-app-pub-3940256099942544/1712485313',
   );
 
-  /// True when runtime still points at Google's sample AdMob IDs.
+  /// True when runtime still points at Google's sample AdMob IDs
+  /// (app id or 2× rewarded unit on either platform).
   static bool get isUsingTestAdMobIds =>
       androidAdMobAppId.contains('3940256099942544') ||
       iosAdMobAppId.contains('3940256099942544') ||
       androidRewardedDoubleAdUnitId.contains('3940256099942544') ||
-      iosRewardedDoubleAdUnitId.contains('3940256099942544');
+      iosRewardedDoubleAdUnitId.contains('3940256099942544') ||
+      androidAdMobAppId.contains('XXXXXXXX') ||
+      iosAdMobAppId.contains('XXXXXXXX') ||
+      androidRewardedDoubleAdUnitId.contains('XXXXXXXX') ||
+      iosRewardedDoubleAdUnitId.contains('XXXXXXXX');
 
   /// Web OAuth redirect origin allowlist (exact match).
   /// Required for non-localhost web builds (fail-closed when empty).

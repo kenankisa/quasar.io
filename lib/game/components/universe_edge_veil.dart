@@ -129,7 +129,7 @@ class UniverseEdgeVeil extends Component with HasGameReference<OrbitGame> {
     final along = _alongSpan(edge, visible, worldSize);
     if (along.$2 - along.$1 < 4) return;
 
-    final lite = CanvasEffects.mobileLiteMode;
+    final lite = CanvasEffects.economyMode;
 
     // 1) Exterior void slab — fills the gap past the world so the cut isn't a
     // hard starfield cliff under a soft fog.

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../game/models/admin_message.dart';
 import '../services/admin_messaging_service.dart';
@@ -135,7 +136,7 @@ class _AdminMessagesPanelState extends State<AdminMessagesPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
 
     return ListenableBuilder(
       listenable: Listenable.merge([
@@ -435,7 +436,7 @@ class _FilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
 
     return Container(
       padding: const EdgeInsets.all(10),
@@ -651,7 +652,7 @@ class _ComposeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final isLive = mode == _ComposeMode.live;
     final isBroadcast = mode == _ComposeMode.broadcast;
     final accent = switch (mode) {
@@ -879,7 +880,7 @@ class _ThreadDetailView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final thread = detail.thread;
     final canReply = thread.category != MessageCategory.broadcast;
     final open = thread.status == MessageThreadStatus.open;
@@ -1030,7 +1031,7 @@ class _ThreadTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final unread = thread.hasUnread;
     final catColor = _categoryColor;
 
@@ -1208,7 +1209,7 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final mine = adminView ? message.isFromAdmin : !message.isFromAdmin;
     final align = mine ? Alignment.centerRight : Alignment.centerLeft;
     final color = mine

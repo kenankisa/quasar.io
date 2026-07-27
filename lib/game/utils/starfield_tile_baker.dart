@@ -8,7 +8,7 @@ typedef StarfieldTilePainter = void Function(Canvas canvas, Rect worldRect);
 
 /// Lazy world-tile bake cache: PictureRecorder → [ui.Image], LRU-capped.
 ///
-/// Used on mobile/web ([CanvasEffects.mobileLiteMode]) so dim stars / nebulae
+/// Used on mobile/web ([CanvasEffects.economyMode]) so dim stars / nebulae
 /// are drawn once per tile instead of every frame.
 class StarfieldTileBaker {
   StarfieldTileBaker({

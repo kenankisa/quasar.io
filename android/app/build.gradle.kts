@@ -12,20 +12,40 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
+/** Google sample App ID — safe for sideload / internal APKs (not Play Store). */
+val googleTestAdMobAppId = "ca-app-pub-3940256099942544~3347511713"
+
+/**
+ * Reject placeholders like ca-app-pub-XXXXXXXX… — MobileAdsInitProvider
+ * hard-crashes the process on launch when APPLICATION_ID is invalid.
+ */
+fun isValidAdMobAppId(value: String): Boolean {
+    val v = value.trim()
+    if (v.isEmpty()) return false
+    if (v.contains("XXXXXXXX", ignoreCase = true)) return false
+    if (v.contains("YYYYYYYY", ignoreCase = true)) return false
+    if (v.contains("YOUR_", ignoreCase = true)) return false
+    if (v.contains("placeholder", ignoreCase = true)) return false
+    return Regex("""^ca-app-pub-\d{16}~\d{10}$""").matches(v)
+}
+
 /** AdMob App ID: env → dart_defines*.json → Google test ID (yalnızca geliştirme). */
 fun resolveAdMobAppId(): String {
-    System.getenv("ANDROID_ADMOB_APP_ID")?.trim()?.takeIf { it.isNotEmpty() }?.let {
+    System.getenv("ANDROID_ADMOB_APP_ID")?.trim()?.takeIf { isValidAdMobAppId(it) }?.let {
         return it
     }
     (project.findProperty("ANDROID_ADMOB_APP_ID") as String?)
         ?.trim()
-        ?.takeIf { it.isNotEmpty() }
+        ?.takeIf { isValidAdMobAppId(it) }
         ?.let { return it }
 
+    // Prefer real prod IDs when present; skip invalid placeholders so a
+    // half-filled dart_defines.prod.json cannot kill every release APK.
     val defineFiles = listOf(
         rootProject.file("../dart_defines.prod.json"),
         rootProject.file("../dart_defines.dev.json"),
         rootProject.file("../dart_defines.dev.json.example"),
+        rootProject.file("../dart_defines.prod.json.example"),
     )
     val keyPattern = Regex("\"ANDROID_ADMOB_APP_ID\"\\s*:\\s*\"([^\"]+)\"")
     for (file in defineFiles) {
@@ -36,12 +56,17 @@ fun resolveAdMobAppId(): String {
                 ?.getOrNull(1)
                 ?.trim()
                 .orEmpty()
-            if (value.isNotEmpty()) return value
+            if (isValidAdMobAppId(value)) return value
+            if (value.isNotEmpty()) {
+                logger.warn(
+                    "Quasar.io: ignoring invalid ANDROID_ADMOB_APP_ID in ${file.name}: $value",
+                )
+            }
         } catch (_: Exception) {
             // ignore malformed define files
         }
     }
-    return "ca-app-pub-3940256099942544~3347511713"
+    return googleTestAdMobAppId
 }
 
 val adMobAppId: String = resolveAdMobAppId()
@@ -66,7 +91,14 @@ android {
     }
 
     signingConfigs {
+        // Some OEM installers reject v2-only APKs with "file is corrupt / dosyada hata".
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+        }
         create("release") {
+            enableV1Signing = true
+            enableV2Signing = true
             if (keystorePropertiesFile.exists()) {
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -92,8 +124,9 @@ android {
             )
             if (adMobAppId.contains("3940256099942544")) {
                 logger.warn(
-                    "Quasar.io: release build still uses the AdMob TEST app id. " +
-                        "Set ANDROID_ADMOB_APP_ID in dart_defines.prod.json before store release.",
+                    "Quasar.io: release build uses AdMob TEST app id. " +
+                        "OK for internal APKs — set a real ANDROID_ADMOB_APP_ID in " +
+                        "dart_defines.prod.json before Play Store.",
                 )
             }
         }

@@ -1,10 +1,11 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/lang_rebuild.dart';
 import '../config/app_version.dart';
-import '../services/lang_service.dart';
 
 class VersionNotesDialog extends StatefulWidget {
   const VersionNotesDialog({
@@ -17,6 +18,30 @@ class VersionNotesDialog extends StatefulWidget {
 
   static const _hiddenVersionKey = 'quasar_whats_new_hidden_version';
   static bool _autoShownThisSession = false;
+
+  static const _v23ChangeKeys = [
+    'v23_change_lobby_redesign',
+    'v23_change_universe_cards',
+    'v23_change_nasa_photos',
+    'v23_change_unique_photo',
+    'v23_change_title_polish',
+    'v23_change_wormhole_blend',
+    'v23_change_next_goal',
+    'v23_change_version_notes',
+  ];
+
+  static const _v22ChangeKeys = [
+    'v22_change_hardcore',
+    'v22_change_trophies',
+    'v22_change_hc_queue',
+    'v22_change_hc_rules',
+    'v22_change_daily_chest',
+    'v22_change_wormhole',
+    'v22_change_hc_visuals',
+    'v22_change_stability',
+    'v22_change_security',
+    'v22_change_version_notes',
+  ];
 
   static const _v21ChangeKeys = [
     'v21_change_rank_points',
@@ -84,7 +109,7 @@ class VersionNotesDialog extends StatefulWidget {
     'v17_change_profile_hub',
     'v17_change_edit_profile',
     'v17_change_ingame_avatars',
-    'v17_change_cosmetic_store',
+    // Cosmetic store deferred — do not list until shipped.
     'v17_change_global_leaderboard',
     'v17_change_single_session',
     'v17_change_live_lobby_stats',
@@ -113,7 +138,7 @@ class VersionNotesDialog extends StatefulWidget {
     'v16_change_cosmic_events',
     'v16_change_hole_merger',
     'v16_change_random_spawn',
-    'v16_change_revive_spawn',
+    // Ad-revive not productized — omit from What's New.
     'v16_change_prey_bot_spawn',
     'v16_change_spawn_spacing',
     'v16_change_version_notes',
@@ -156,7 +181,9 @@ class VersionNotesDialog extends StatefulWidget {
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return VersionNotesDialog(showDontShowAgain: showDontShowAgain);
+        return LangRebuild(
+          child: VersionNotesDialog(showDontShowAgain: showDontShowAgain),
+        );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curve = CurvedAnimation(
@@ -191,7 +218,7 @@ class _VersionNotesDialogState extends State<VersionNotesDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final size = MediaQuery.sizeOf(context);
 
     return Center(
@@ -277,14 +304,46 @@ class _VersionNotesDialogState extends State<VersionNotesDialog> {
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                       children: [
                         _VersionHeader(
+                          title: lang.t('v23_section_title'),
+                          subtitle: lang.t('v23_section_subtitle'),
+                        ),
+                        const SizedBox(height: 12),
+                        ...VersionNotesDialog._v23ChangeKeys.map(
+                          (key) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _ChangeItem(text: lang.t(key)),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _VersionHeader(
+                          title: lang.t('v22_section_title'),
+                          subtitle: lang.t('v22_section_subtitle'),
+                          dimmed: true,
+                        ),
+                        const SizedBox(height: 12),
+                        ...VersionNotesDialog._v22ChangeKeys.map(
+                          (key) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _ChangeItem(
+                              text: lang.t(key),
+                              dimmed: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _VersionHeader(
                           title: lang.t('v21_section_title'),
                           subtitle: lang.t('v21_section_subtitle'),
+                          dimmed: true,
                         ),
                         const SizedBox(height: 12),
                         ...VersionNotesDialog._v21ChangeKeys.map(
                           (key) => Padding(
                             padding: const EdgeInsets.only(bottom: 10),
-                            child: _ChangeItem(text: lang.t(key)),
+                            child: _ChangeItem(
+                              text: lang.t(key),
+                              dimmed: true,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),

@@ -149,6 +149,23 @@ class MatchPacing {
             lateGameRadiationIdleSeconds: 8,
             lateGameRadiationShrinkPerSecond: 2.25,
           ),
+        RoomType.hardcore => const MatchPacing(
+            targetMinutesMin: 8,
+            targetMinutesMax: 12,
+            supernovaIntervalSeconds: 75,
+            supernovaFirstDelaySeconds: 55,
+            eventGrowthCapPerBurst: 36,
+            supernovaPlanetCount: 16,
+            earlyGameDurationSeconds: 40,
+            earlyGamePlayerGrowthMultiplier: 0.95,
+            respawnDelayMultiplier: 1.15,
+            meteorShowerInitialCooldown: 45,
+            radiationRadius: 170,
+            radiationIdleSeconds: 9,
+            lateGameRadiationRadius: 430,
+            lateGameRadiationIdleSeconds: 7,
+            lateGameRadiationShrinkPerSecond: 2.4,
+          ),
       };
 
   static void applyOverrides(Map<RoomType, MatchPacing> values) {

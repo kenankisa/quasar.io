@@ -228,6 +228,7 @@ class AdminLoadTestService extends ChangeNotifier {
         for (final r in selected) r: RoomConfig.forRoom(r).worldSize,
       };
       final adminSession = _adminClient.auth.currentSession;
+      AuthService.instance.pinCurrentSession();
 
       // 1) Tüm sim hesaplarını ÖNCE üret — sim sign-in admin JWT'yi
       // bozarsa sonraki mint'ler "admin forbidden" olmasın.
@@ -241,6 +242,7 @@ class AdminLoadTestService extends ChangeNotifier {
           _error = _humanizeStartError(e);
           if (mintedList.isEmpty) {
             _activeRoomTypes.clear();
+            AuthService.instance.unpinSession();
             notifyListeners();
             return null;
           }
@@ -293,6 +295,7 @@ class AdminLoadTestService extends ChangeNotifier {
           if (started == 0) break;
         } finally {
           await _restoreAdminSession(adminSession);
+          await AuthService.instance.restorePinnedSession();
         }
         // Yüksek sayıda canlı istemci varken join/auth için daha geniş aralık
         final gapMs = started >= 280
@@ -334,19 +337,26 @@ class AdminLoadTestService extends ChangeNotifier {
         failed: _failed,
       );
     } finally {
+      if (_players.isEmpty) {
+        AuthService.instance.unpinSession();
+      }
       _busy = false;
       notifyListeners();
     }
   }
 
-  /// Sim istemci girişi ana oturumu ezdiyse admin JWT'yi geri yükle.
+  /// Keep admin JWT on the shared client. Only recover when signed out or a
+  /// different user is active — never rewind a refreshed access token.
   Future<void> _restoreAdminSession(Session? snapshot) async {
     if (snapshot == null) return;
     final current = _adminClient.auth.currentSession;
-    if (current?.user.id == snapshot.user.id &&
-        current?.accessToken == snapshot.accessToken) {
+    final currentId = current?.user.id;
+    final expectId = snapshot.user.id;
+
+    if (currentId != null && currentId == expectId) {
       return;
     }
+
     try {
       await _adminClient.auth.recoverSession(jsonEncode(snapshot.toJson()));
       debugPrint(
@@ -533,6 +543,7 @@ class AdminLoadTestService extends ChangeNotifier {
       if (!silent) _error = 'admin_load_test_stop_failed';
       return null;
     } finally {
+      AuthService.instance.unpinSession();
       if (!silent) {
         _busy = false;
         notifyListeners();

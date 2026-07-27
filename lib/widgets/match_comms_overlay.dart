@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 import 'package:flutter/services.dart';
 
 import '../game/models/match_speech.dart';
@@ -33,24 +34,30 @@ class MatchFeedOverlay extends StatelessWidget {
             return ValueListenableBuilder<double>(
               valueListenable: GameHudMetrics.toolbarHeight,
               builder: (context, _, _) {
+                final screenW = MediaQuery.sizeOf(context).width;
+                // Wide enough for full names (12+12+arrow); scales with phone/tablet.
+                final feedMaxW = (screenW * 0.62).clamp(200.0, 420.0);
                 return Positioned(
                   top: GameHudMetrics.totalTopInset(context) + 8,
                   left: 10,
-                  width: MediaQuery.sizeOf(context).width * 0.34,
-                  child: IgnorePointer(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (final entry in entries.take(4))
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: _FeedChip(
-                              name: entry.name,
-                              text: entry.text,
-                              isKill: entry.isKill,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: feedMaxW),
+                    child: IgnorePointer(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final entry in entries.take(4))
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: _FeedChip(
+                                name: entry.name,
+                                text: entry.text,
+                                isKill: entry.isKill,
+                              ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -78,6 +85,30 @@ class _FeedChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final bodyColor =
         isKill ? const Color(0xFFFFCCAA) : const Color(0xFFD8F6FF);
+    final bodyStyle = TextStyle(
+      color: bodyColor,
+      fontSize: 11.5,
+      fontWeight: FontWeight.w600,
+    );
+    final nameStyle = TextStyle(
+      color: bodyColor.withValues(alpha: 0.75),
+      fontSize: 10.5,
+      fontWeight: FontWeight.w700,
+    );
+
+    Widget fitLine(String value, TextStyle style, {int maxLines = 1}) {
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          value,
+          maxLines: maxLines,
+          softWrap: false,
+          style: style,
+        ),
+      );
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: isKill
@@ -93,41 +124,14 @@ class _FeedChip extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         child: name == null || name!.isEmpty
-            ? Text(
-                text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: bodyColor,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              )
+            ? fitLine(text, bodyStyle)
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    name!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: bodyColor.withValues(alpha: 0.75),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  fitLine(name!, nameStyle),
                   const SizedBox(height: 1),
-                  Text(
-                    text,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: bodyColor,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  fitLine(text, bodyStyle),
                 ],
               ),
       ),
@@ -180,7 +184,7 @@ class _MatchCommsControlsState extends State<MatchCommsControls> {
   }
 
   void _sendReaction(MatchReactionPreset preset) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final label = lang.t(preset.labelKey);
     final text = label == preset.labelKey ? preset.fallback : label;
     if (game.trySendReaction(text)) {
@@ -202,7 +206,7 @@ class _MatchCommsControlsState extends State<MatchCommsControls> {
   @override
   Widget build(BuildContext context) {
     final r = ResponsiveLayout.of(context);
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final barHeight = r.bottomBoostSize;
     final overlayBottom = r.gameControlBottom + barHeight + r.w(8);
 
@@ -319,16 +323,19 @@ class _MatchCommsControlsState extends State<MatchCommsControls> {
                             },
                           ),
                           SizedBox(width: gap),
-                          BoostButton(
-                            energy: player.boostEnergy,
-                            isReady: player.isBoostReady,
-                            isActive: player.isBoostActive,
-                            size: boostSize,
-                            onActivate: () {
-                              if (player.tryActivateBoost()) {
-                                game.hudTick.value++;
-                              }
-                            },
+                          _TutorialBoostHighlight(
+                            active: game.interactiveTutorial.shouldHighlightBoost,
+                            child: BoostButton(
+                              energy: player.boostEnergy,
+                              isReady: player.isBoostReady,
+                              isActive: player.isBoostActive,
+                              size: boostSize,
+                              onActivate: () {
+                                if (player.tryActivateBoost()) {
+                                  game.hudTick.value++;
+                                }
+                              },
+                            ),
                           ),
                         ],
                       ),
@@ -520,6 +527,80 @@ class _MatchChatBar extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TutorialBoostHighlight extends StatefulWidget {
+  const _TutorialBoostHighlight({
+    required this.active,
+    required this.child,
+  });
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_TutorialBoostHighlight> createState() => _TutorialBoostHighlightState();
+}
+
+class _TutorialBoostHighlightState extends State<_TutorialBoostHighlight>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    if (widget.active) _pulse.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TutorialBoostHighlight oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!widget.active && _pulse.isAnimating) {
+      _pulse.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.active) return widget.child;
+
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, child) {
+        final glow = 0.35 + _pulse.value * 0.45;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF00F0FF).withValues(alpha: glow),
+                blurRadius: 16 + _pulse.value * 8,
+              ),
+            ],
+            border: Border.all(
+              color: const Color(0xFF00F0FF)
+                  .withValues(alpha: 0.55 + glow * 0.3),
+              width: 2,
+            ),
+          ),
+          child: child,
+        );
+      },
+      child: widget.child,
     );
   }
 }

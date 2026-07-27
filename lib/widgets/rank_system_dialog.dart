@@ -1,6 +1,9 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
+
+import '../utils/lang_rebuild.dart';
 
 import '../game/models/app_rank_config.dart';
 import '../services/app_rank_config_service.dart';
@@ -13,13 +16,16 @@ class RankSystemDialog extends StatelessWidget {
   const RankSystemDialog({
     super.key,
     this.playerRankPoints = 0,
+    this.username,
   });
 
   final int playerRankPoints;
+  final String? username;
 
   static Future<void> show(
     BuildContext context, {
     int playerRankPoints = 0,
+    String? username,
   }) {
     return showGeneralDialog<void>(
       context: context,
@@ -28,7 +34,12 @@ class RankSystemDialog extends StatelessWidget {
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return RankSystemDialog(playerRankPoints: playerRankPoints);
+        return LangRebuild(
+          child: RankSystemDialog(
+            playerRankPoints: playerRankPoints,
+            username: username,
+          ),
+        );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curve = CurvedAnimation(
@@ -48,10 +59,13 @@ class RankSystemDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final size = MediaQuery.sizeOf(context);
     final cfg = AppRankConfigService.instance.config;
-    final currentTier = playerRankForPoints(playerRankPoints);
+    final currentTier = playerRankForPoints(
+      playerRankPoints,
+      username: username,
+    );
     // Lowest tier first for a climb story (Nebula → Singularity).
     final tiersAsc = playerRankTiers.reversed.toList();
 
@@ -422,6 +436,7 @@ class _EarnPointsCard extends StatelessWidget {
       (lang.t('admin_rank_points_normal'), config.winPointsNormal, const Color(0xFF00F0FF)),
       (lang.t('admin_rank_points_elite'), config.winPointsElite, const Color(0xFFCE93D8)),
       (lang.t('admin_rank_points_unique'), config.winPointsUnique, const Color(0xFFFFD54F)),
+      (lang.t('admin_rank_points_hardcore'), config.winPointsHardcore, const Color(0xFFFF6B35)),
     ];
 
     return Container(

@@ -147,7 +147,7 @@ class BotNameLabel extends StatelessWidget {
 
     final points = rankPoints ?? diamonds;
     final rank = !isBot && points != null
-        ? playerRankForPoints(points)
+        ? playerRankForPoints(points, username: name)
         : null;
     if (rank == null && (!isBot || !showBotBadge)) return text;
 

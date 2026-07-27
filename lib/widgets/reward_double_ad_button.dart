@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../utils/lang_scope.dart';
 
 import '../services/ad_service.dart';
-import '../services/lang_service.dart';
 import '../services/player_session_service.dart';
 import '../services/profile_service.dart';
 
@@ -92,6 +92,12 @@ class _RewardDoubleAdButtonState extends State<RewardDoubleAdButton> {
         PlayerSessionService.instance.setMatchIdlePaused(true);
         bool earned = false;
         try {
+          if (AdService.instance.isUsingTestDoubleAdUnit) {
+            debugPrint(
+              'RewardDoubleAdButton: showing TEST AdMob unit — '
+              'use dart_defines.prod.json for store builds',
+            );
+          }
           earned = await AdService.instance.showRewardedDoubleAd(
             ssvUserId: widget.ssvUserId,
             ssvCustomData: sessionId,
@@ -181,7 +187,7 @@ class _RewardDoubleAdButtonState extends State<RewardDoubleAdButton> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = LanguageService.instance;
+    final lang = context.lang;
     final total = _total;
     final extra = widget.baseDiamonds;
 
