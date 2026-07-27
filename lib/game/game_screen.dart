@@ -324,8 +324,7 @@ class _GameScreenState extends State<GameScreen>
       );
 
   /// Lobide yazılan yutulma cezası — uyarıda da aynı rakam gösterilir.
-  int get _roomEliminationPenalty =>
-      widget.roomType.eliminationDiamondPenalty;
+  int get _roomEliminationPenalty => _eliminationPenalty;
 
   bool _shouldConfirmQuit(OrbitGame game) {
     if (_matchResultSaved || _isLeaving) return false;

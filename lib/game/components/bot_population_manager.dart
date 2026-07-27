@@ -92,12 +92,19 @@ class BotPopulationManager extends Component with HasGameReference<OrbitGame> {
 
   bool get isAuthority => _isAuthority;
 
-  int get targetBotCount =>
-      (roomCapacity - _realPlayerCount).clamp(0, roomCapacity);
+  int get targetBotCount {
+    if (!game.roomType.allowsBots) return 0;
+    return (roomCapacity - _realPlayerCount).clamp(0, roomCapacity);
+  }
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+    if (!game.roomType.allowsBots) {
+      _isAuthority = false;
+      _targetBotCount = 0;
+      return;
+    }
     if (game.isBotOnlyRoom) {
       _isAuthority = true;
       _targetBotCount = targetBotCount;
@@ -111,7 +118,7 @@ class BotPopulationManager extends Component with HasGameReference<OrbitGame> {
 
   /// Host runs AI/spawn; peers only render snapshots.
   void setAuthority(bool value) {
-    if (_closed) return;
+    if (_closed || !game.roomType.allowsBots) return;
     if (_isAuthority == value) return;
     _isAuthority = value;
 
@@ -140,6 +147,10 @@ class BotPopulationManager extends Component with HasGameReference<OrbitGame> {
 
   /// Called when additional real players join the room (multiplayer).
   void setRealPlayerCount(int count) {
+    if (!game.roomType.allowsBots) {
+      _realPlayerCount = count.clamp(0, roomCapacity);
+      return;
+    }
     _realPlayerCount = count.clamp(0, roomCapacity);
     if (_isAuthority) {
       unawaited(_syncPopulation());

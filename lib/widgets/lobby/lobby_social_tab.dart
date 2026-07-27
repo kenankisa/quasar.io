@@ -250,12 +250,10 @@ class _LobbySocialTabState extends State<LobbySocialTab> {
                           ),
                         ),
                         IconButton(
-                          onPressed: _chat.canSend ? _send : null,
-                          icon: Icon(
+                          onPressed: _send,
+                          icon: const Icon(
                             Icons.send_rounded,
-                            color: _chat.canSend
-                                ? const Color(0xFF5AD7FF)
-                                : Colors.white24,
+                            color: Color(0xFF5AD7FF),
                           ),
                         ),
                       ],

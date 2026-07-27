@@ -11,6 +11,7 @@ import '../match_phase.dart';
 import '../models/bot_sync_state.dart';
 import '../models/player_sync_state.dart';
 import '../orbit_game.dart';
+import '../room_type.dart';
 
 /// Realtime oda senkronu, bot host failover ve yayın döngüsü.
 class NetworkSyncSystem {
@@ -52,7 +53,9 @@ class NetworkSyncSystem {
   }
 
   void refreshBotHostAuthority() {
-    if (game.isBotOnlyRoom || !game.isReady) return;
+    if (game.isBotOnlyRoom || !game.isReady || !game.roomType.allowsBots) {
+      return;
+    }
     if (game.electedBotHostId == game.playerId) {
       _forceBotAuthority = false;
     }
@@ -61,6 +64,7 @@ class NetworkSyncSystem {
 
   void handleBotSnapshot(BotSnapshot snapshot) {
     if (game.isBotOnlyRoom ||
+        !game.roomType.allowsBots ||
         game.isMatchEnded ||
         game.lifecycle.universeShutdownInitiated) {
       return;
@@ -89,6 +93,7 @@ class NetworkSyncSystem {
 
   void tickBotHostFailover(double dt) {
     if (game.isBotOnlyRoom ||
+        !game.roomType.allowsBots ||
         game.isMatchEnded ||
         game.lifecycle.universeShutdownInitiated) {
       return;
@@ -222,7 +227,9 @@ class NetworkSyncSystem {
     if (!game.player.isEliminated) {
       game.realtime.broadcastState(buildSyncState());
     }
-    if (game.isBotHost && game.botPopulation.isAuthority) {
+    if (game.isBotHost &&
+        game.roomType.allowsBots &&
+        game.botPopulation.isAuthority) {
       game.realtime.broadcastBotSnapshot(
         game.botPopulation.buildSnapshot(game.playerId),
       );

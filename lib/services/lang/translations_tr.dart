@@ -781,7 +781,7 @@ const Map<String, String> kTrTranslations = {
           'Kalkan güçlendirmelerini toplayarak büyük kara deliklerin yerçekiminden geçici olarak korunun.',
       'how_to_play_victory_title': 'Zafer',
       'how_to_play_victory_desc':
-          'Yarıçap 500\'e ulaşınca maç biter (Eşsiz evrenlerde 550) ve evren herkes için kapanır. Normal: 1. +5, 2. +3, 3. +2 (yutulma −1). Elit: 1. +10, 2. +6, 3. +4 (yutulma −2). Eşsiz: 1. +15, 2. +10, 3. +5 (yutulma −3). Elmas 0\'ın altına inmez. Yeni oyuncular 20 Elmas ile başlar.',
+          'Yarıçap 500\'e ulaşınca maç biter (Eşsiz evrenlerde 550) ve evren herkes için kapanır. Normal: 1. +5, 2. +3, 3. +2 (yutulma −1). Elit: 1. +10, 2. +6, 3. +4 (yutulma −2). Eşsiz: 1. +15, 2. +10, 3. +5 (yutulma −3). Elmas 0\'ın altına inmez. Yeni oyuncular 25 Elmas ile başlar.',
       'how_to_play_ranks_title': 'Rütbe sistemi',
       'how_to_play_ranks_desc':
           'Yıldız rütben (Nebula → Tekillik) elmasa değil, galibiyet puanına göre yükselir.\n'
@@ -791,7 +791,7 @@ const Map<String, String> kTrTranslations = {
           'Galibiyet sayısı da Eğitimi saymaz. Dünya sıralaması varsayılan olarak galibiyet puanına göredir (Rütbe); Zenginlik sekmesi elmasa göre sıralar.',
       'how_to_play_currencies_title': 'Para Birimleri',
       'how_to_play_currencies_desc':
-          'Yeni hesaplar 20 Elmas ile başlar. Eğitim Evreni ücretsizdir. Normal evren için en az 25 Elmas gerekir. Elmaslar Elit (100) ve Eşsiz (200) evrenleri açar.',
+          'Yeni hesaplar 25 Elmas ile başlar. Eğitim Evreni ücretsizdir. Normal evren 25 Elmas ile açılır. Elmaslar Elit (100) ve Eşsiz (200) evrenleri açar.',
       'how_to_play_events_title': 'Kozmik Olaylar',
       'how_to_play_events_desc':
           'Kuasar Fırtınası, Süpernova, Meteor Yağmuru ve daha fazlasına dikkat edin — savaş alanını dramatik şekilde değiştirirler.',
@@ -914,7 +914,7 @@ const Map<String, String> kTrTranslations = {
       'v17_change_match_rewards':
           'Maç sonuçlarına göre elmas kazanın veya kaybedin — Eşsiz evrende podyum +15/+10/+5, yutulmada evren tipine göre −1/−2/−3 ceza. Sonuçlar sunucuda kaydedilir.',
       'v17_change_diamond_gates':
-          'Yeni hesaplar 20 elmasla başlar. Eğitim ücretsiz; Normal 25, Elit 100, Eşsiz 200 elmas ister. Lobi kartları giriş, ödül ve ceza tablolarını gösterir.',
+          'Yeni hesaplar 25 elmasla başlar. Eğitim ücretsiz; Normal 25, Elit 100, Eşsiz 200 elmas ister. Lobi kartları giriş, ödül ve ceza tablolarını gösterir.',
       'v17_change_profile_hub':
           'Lobide avatara dokunarak 3 sekmeli profil menüsünü açın: İstatistikler, Görünümler ve Mağaza. Galibiyet, global sıra ve canlı profil senkronu.',
       'v17_change_edit_profile':

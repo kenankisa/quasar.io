@@ -40,13 +40,13 @@ extension RoomTypeRewards on RoomType {
   }
 
   /// Yutulma cezası (elmas asla 0 altına inmez — sunucu tarafında floor).
-  /// Basit 0, Normal −1, Elite −2, Unique −3. Hardcore: ayrı ekonomi.
+  /// Canlı değerler için [FirstMatchTuning.eliminationPenalty] / ekonomi config.
   int get eliminationDiamondPenalty => switch (this) {
         RoomType.simple => 0,
         RoomType.normal => 1,
         RoomType.elite => 2,
         RoomType.unique => 3,
-        RoomType.hardcore => 0,
+        RoomType.hardcore => 15,
       };
 
   bool get awardsPlacementPodium => this != RoomType.hardcore;

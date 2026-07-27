@@ -20,6 +20,14 @@ class PlayerAlreadyActiveException implements Exception {
   String toString() => 'player_already_active';
 }
 
+/// Oturum kapısı — lobiye yalnızca [PlayerSessionGate.ready] iken girilir.
+enum PlayerSessionGate {
+  unknown,
+  checking,
+  ready,
+  blocked,
+}
+
 class PlayerSessionStatus {
   const PlayerSessionStatus({
     required this.active,
@@ -87,6 +95,8 @@ class PlayerSessionService extends ChangeNotifier {
   bool _starting = false;
   bool _expiring = false;
   bool _inMatch = false;
+  PlayerSessionGate _gate = PlayerSessionGate.unknown;
+  String? _sessionBlockMessageKey;
   /// Admin paneli açıkken true — AFK tick/expire çalışmaz.
   bool _idleSuppressed = false;
   bool _adminListenerAttached = false;
@@ -210,6 +220,27 @@ class PlayerSessionService extends ChangeNotifier {
 
   bool get hasClaimedSession => _claimed;
 
+  PlayerSessionGate get sessionGate => _gate;
+
+  bool get isSessionReady => _gate == PlayerSessionGate.ready && _claimed;
+
+  bool get isSessionChecking =>
+      _gate == PlayerSessionGate.checking ||
+      (_gate == PlayerSessionGate.unknown && AuthService.instance.isSignedIn);
+
+  /// Login ekranında gösterilmek üzere (bir kez tüketilir).
+  String? takeSessionBlockMessageKey() {
+    final key = _sessionBlockMessageKey;
+    _sessionBlockMessageKey = null;
+    return key;
+  }
+
+  void _setGate(PlayerSessionGate gate) {
+    if (_gate == gate) return;
+    _gate = gate;
+    _notifySafe();
+  }
+
   SupabaseClient get _client => AuthService.instance.client;
 
   void attachMatchIdleHooks(MatchIdleHooks hooks) {
@@ -317,22 +348,25 @@ class PlayerSessionService extends ChangeNotifier {
   Future<void> ensureAppSession() async {
     _ensureAdminListener();
     if (_starting) return;
-    if (!AuthService.instance.isSignedIn) return;
+    if (!AuthService.instance.isSignedIn) {
+      _setGate(PlayerSessionGate.unknown);
+      return;
+    }
 
     // Zaten claim'liyse eski AFK deadline ile hemen atılmayı önle.
-    if (_claimed) {
+    if (_claimed && _gate == PlayerSessionGate.ready) {
       _inMatch = _matchHooks != null;
       _applyIdleWatchForCurrentUser();
       _startHeartbeat();
-      notifyListeners();
       return;
     }
 
     _starting = true;
+    _setGate(PlayerSessionGate.checking);
     try {
       final status = await checkStatusAfterAuth();
       if (status.blockedOnOtherDevice) {
-        await AuthService.instance.signOut();
+        await _kickDueToOtherDevice();
         return;
       }
 
@@ -340,13 +374,76 @@ class PlayerSessionService extends ChangeNotifier {
       _inMatch = false;
       _startHeartbeat();
       _applyIdleWatchForCurrentUser();
-      notifyListeners();
+      _setGate(PlayerSessionGate.ready);
     } on PlayerAlreadyActiveException {
-      await AuthService.instance.signOut();
+      await _kickDueToOtherDevice();
     } catch (e, stackTrace) {
       debugPrint('ensureAppSession failed: $e\n$stackTrace');
+      _sessionBlockMessageKey = 'player_already_active_message';
+      await AuthService.instance.signOut();
+      _setGate(PlayerSessionGate.unknown);
     } finally {
       _starting = false;
+    }
+  }
+
+  /// Uygulama ön plana gelince veya lobide — başka cihaz oturumu var mı?
+  Future<void> revalidateSession() async {
+    if (!AuthService.instance.isSignedIn ||
+        _starting ||
+        _expiring ||
+        _gate == PlayerSessionGate.checking) {
+      return;
+    }
+
+    try {
+      final status = await checkStatus();
+      if (status.blockedOnOtherDevice) {
+        await _kickDueToOtherDevice();
+        return;
+      }
+
+      if (status.active && status.ownDevice) {
+        if (!_claimed) {
+          _claimed = true;
+          _setGate(PlayerSessionGate.ready);
+          _startHeartbeat();
+          _applyIdleWatchForCurrentUser();
+        }
+        return;
+      }
+
+      if (_claimed && !status.active) {
+        try {
+          await _claim(roomType: null);
+          _setGate(PlayerSessionGate.ready);
+        } on PlayerAlreadyActiveException {
+          await _kickDueToOtherDevice();
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('revalidateSession: $e\n$stackTrace');
+    }
+  }
+
+  Future<void> _kickDueToOtherDevice() async {
+    if (_expiring) return;
+    _expiring = true;
+    _sessionBlockMessageKey = 'player_already_active_message';
+    _setGate(PlayerSessionGate.blocked);
+    try {
+      try {
+        await RoomMatchmakingService.instance.leaveActiveRoom();
+      } catch (e, stackTrace) {
+        debugPrint('kick leaveActiveRoom: $e\n$stackTrace');
+      }
+      await release();
+      await AuthService.instance.signOut();
+    } catch (e, stackTrace) {
+      debugPrint('_kickDueToOtherDevice: $e\n$stackTrace');
+    } finally {
+      _setGate(PlayerSessionGate.unknown);
+      _expiring = false;
     }
   }
 
@@ -410,7 +507,7 @@ class PlayerSessionService extends ChangeNotifier {
     _forceNoteActivity();
 
     if (!_claimed) {
-      notifyListeners();
+      _setGate(PlayerSessionGate.unknown);
       return;
     }
 
@@ -424,7 +521,7 @@ class PlayerSessionService extends ChangeNotifier {
       debugPrint('release_player_session: ${e.message}');
     } finally {
       _claimed = false;
-      notifyListeners();
+      _setGate(PlayerSessionGate.unknown);
     }
   }
 
@@ -705,13 +802,24 @@ class PlayerSessionService extends ChangeNotifier {
       );
     } on PostgrestException catch (e) {
       debugPrint('heartbeat_player_session: ${e.message}');
-      if (e.message.toLowerCase().contains('session_not_found')) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('session_not_found')) {
         _claimed = false;
         _stopHeartbeat();
         _stopIdleWatch();
-        _clearWarning(notify: true);
-        _clearMatchAfk(notify: true);
-        _clearMatchResultExit(notify: true);
+        unawaited(() async {
+          try {
+            await _claim(roomType: null);
+            _setGate(PlayerSessionGate.ready);
+            _startHeartbeat();
+            _applyIdleWatchForCurrentUser();
+          } on PlayerAlreadyActiveException {
+            await _kickDueToOtherDevice();
+          } catch (err, st) {
+            debugPrint('heartbeat reclaim: $err\n$st');
+          }
+        }());
+        return;
       }
     }
   }

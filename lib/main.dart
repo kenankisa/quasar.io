@@ -276,16 +276,40 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<AuthGate> {
+class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   String? _boundUserId;
   Timer? _logoutDebounce;
 
   static const _logoutGrace = Duration(milliseconds: 900);
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _logoutDebounce?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!AppLifecycle.shouldPause(state) && AuthService.instance.isSignedIn) {
+      unawaited(PlayerSessionService.instance.revalidateSession());
+    }
+  }
+
+  void _scheduleSessionBootstrap(String userId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(AdminAccess.refreshAdminStatus());
+      unawaited(PlayerSessionService.instance.ensureAppSession());
+      ServerClockService.instance.attach();
+      unawaited(LiveAnnouncementService.instance.attach());
+    });
   }
 
   void _scheduleLogoutCleanup() {
@@ -325,15 +349,20 @@ class _AuthGateState extends State<AuthGate> {
           _cancelLogoutCleanup();
           if (_boundUserId != userId) {
             _boundUserId = userId;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              unawaited(AdminAccess.refreshAdminStatus());
-              unawaited(PlayerSessionService.instance.ensureAppSession());
-              ServerClockService.instance.attach();
-              unawaited(LiveAnnouncementService.instance.attach());
-            });
+            _scheduleSessionBootstrap(userId);
+          } else if (!PlayerSessionService.instance.isSessionReady) {
+            _scheduleSessionBootstrap(userId);
           }
-          // Admin dahil herkes lobiye düşer — yönetim paneli gizli girişle açılır.
-          return const LobbyScreen();
+
+          return ListenableBuilder(
+            listenable: PlayerSessionService.instance,
+            builder: (context, _) {
+              if (!PlayerSessionService.instance.isSessionReady) {
+                return const _SessionGateSplash();
+              }
+              return const LobbyScreen();
+            },
+          );
         }
 
         // Brief null sessions (token recover / refresh) must not pop AdminScreen.
@@ -344,6 +373,28 @@ class _AuthGateState extends State<AuthGate> {
         }
         return const LoginScreen();
       },
+    );
+  }
+}
+
+/// Oturum doğrulanana kadar lobi yerine gösterilir (çoklu cihaz kilidi).
+class _SessionGateSplash extends StatelessWidget {
+  const _SessionGateSplash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF020208),
+      body: Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: Color(0xFF00F0FF),
+          ),
+        ),
+      ),
     );
   }
 }

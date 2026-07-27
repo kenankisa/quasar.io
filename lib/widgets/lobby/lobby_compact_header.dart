@@ -87,17 +87,6 @@ class LobbyCompactHeader extends StatelessWidget {
                     ],
                   ),
                 ),
-                _DiamondChip(
-                  value: loading ? '—' : '$diamonds',
-                  compact: compact,
-                ),
-                SizedBox(width: r.w(6)),
-                DailyChestLobbyButton(
-                  available: !loading && dailyChestAvailable == true,
-                  nextAvailableAt: dailyChestNextAvailableAt,
-                  onTap: loading ? null : onDailyChestTap,
-                  compact: true,
-                ),
                 _HeaderIconButton(
                   tooltip: lang.t('msg_player_title'),
                   onTap: onMessagesTap,
@@ -163,10 +152,31 @@ class LobbyCompactHeader extends StatelessWidget {
                 ),
               ],
             ),
-            if (showMatchDay) ...[
-              SizedBox(height: r.h(8)),
-              _MatchDayStrip(earned: matchDayEarned!, cap: matchDayCap!),
-            ],
+            SizedBox(height: r.h(8)),
+            Row(
+              children: [
+                _DiamondChip(
+                  value: loading ? '—' : '$diamonds',
+                  compact: compact,
+                ),
+                SizedBox(width: r.w(6)),
+                Expanded(
+                  child: showMatchDay
+                      ? _MatchDayStrip(
+                          earned: matchDayEarned!,
+                          cap: matchDayCap!,
+                        )
+                      : _MatchDayStripPlaceholder(compact: compact),
+                ),
+                SizedBox(width: r.w(6)),
+                DailyChestLobbyButton(
+                  available: !loading && dailyChestAvailable == true,
+                  nextAvailableAt: dailyChestNextAvailableAt,
+                  onTap: loading ? null : onDailyChestTap,
+                  compact: true,
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -456,39 +466,31 @@ class _MatchDayStrip extends StatelessWidget {
             : const Color(0xFF00F0FF);
 
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: r.w(10),
-        vertical: r.w(7),
-      ),
+      height: r.w(34),
+      padding: EdgeInsets.symmetric(horizontal: r.w(8)),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         gradient: LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
           colors: [
-            color.withValues(alpha: 0.14),
-            color.withValues(alpha: 0.05),
+            color.withValues(alpha: 0.12),
+            color.withValues(alpha: 0.04),
           ],
         ),
-        border: Border.all(color: color.withValues(alpha: 0.32)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.1),
-            blurRadius: 8,
-          ),
-        ],
+        border: Border.all(color: color.withValues(alpha: 0.28)),
       ),
       child: Row(
         children: [
-          Icon(Icons.diamond_rounded, size: 12, color: color),
+          Icon(Icons.diamond_rounded, size: r.sp(12), color: color),
           SizedBox(width: r.w(6)),
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(999),
               child: LinearProgressIndicator(
                 value: progress,
-                minHeight: 4,
-                backgroundColor: Colors.white.withValues(alpha: 0.1),
+                minHeight: 5,
+                backgroundColor: Colors.white.withValues(alpha: 0.08),
                 color: color,
               ),
             ),
@@ -500,7 +502,56 @@ class _MatchDayStrip extends StatelessWidget {
                 .replaceAll('{earned}', '$earned')
                 .replaceAll('{cap}', '$cap'),
             style: TextStyle(
-              color: color.withValues(alpha: 0.9),
+              color: color.withValues(alpha: 0.92),
+              fontSize: r.sp(10),
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MatchDayStripPlaceholder extends StatelessWidget {
+  const _MatchDayStripPlaceholder({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = ResponsiveLayout.of(context);
+    const color = Color(0xFF00F0FF);
+
+    return Container(
+      height: r.w(34),
+      padding: EdgeInsets.symmetric(horizontal: r.w(8)),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        color: color.withValues(alpha: 0.04),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.diamond_rounded, size: r.sp(12), color: color.withValues(alpha: 0.5)),
+          SizedBox(width: r.w(6)),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: 0,
+                minHeight: 5,
+                backgroundColor: Colors.white.withValues(alpha: 0.06),
+                color: color.withValues(alpha: 0.35),
+              ),
+            ),
+          ),
+          SizedBox(width: r.w(8)),
+          Text(
+            '—/—',
+            style: TextStyle(
+              color: color.withValues(alpha: 0.45),
               fontSize: r.sp(10),
               fontWeight: FontWeight.w700,
             ),

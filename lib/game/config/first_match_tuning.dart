@@ -1,3 +1,4 @@
+import '../../services/app_economy_config_service.dart';
 import '../components/player.dart';
 import '../room_type.dart';
 import 'bot_difficulty.dart';
@@ -17,13 +18,14 @@ class FirstMatchTuning {
   }) =>
       !tutorialCompleted && gamesWon == 0;
 
-  /// Yutulma / erken çıkış cezası — lobi kartlarıyla aynı (Normal −1, Elit −2, Eşsiz −3).
+  /// Yutulma / erken çıkış cezası — admin ekonomi ayarlarıyla senkron.
   static int eliminationPenalty({
     required RoomType roomType,
     required int gamesWon,
   }) {
     // gamesWon reserved for future onboarding knobs; penalty is per room type.
-    return roomType.eliminationDiamondPenalty;
+    return AppEconomyConfigService.instance.config
+        .eliminationPenalty(roomType.name);
   }
 
   static double spawnProtectionDuration({

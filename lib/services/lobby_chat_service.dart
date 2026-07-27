@@ -58,15 +58,12 @@ class LobbyChatService extends ChangeNotifier {
 
   static const maxMessageLength = 120;
   static const maxStoredMessages = 40;
-  static const sendCooldown = Duration(milliseconds: 900);
   static const messageTtl = Duration(minutes: 30);
   static const _expirySweepInterval = Duration(seconds: 30);
 
   RealtimeChannel? _channel;
   Timer? _expiryTimer;
   Future<void>? _operation;
-  DateTime? _lastSendAt;
-  bool _sending = false;
   final List<LobbyChatMessage> _messages = [];
 
   List<LobbyChatMessage> get messages => List.unmodifiable(_messages);
@@ -120,19 +117,7 @@ class LobbyChatService extends ChangeNotifier {
         }
       });
 
-  bool get canSend {
-    if (_sending) return false;
-    final last = _lastSendAt;
-    if (last == null) return true;
-    return DateTime.now().difference(last) >= sendCooldown;
-  }
-
-  Duration? get sendCooldownRemaining {
-    final last = _lastSendAt;
-    if (last == null) return null;
-    final left = sendCooldown - DateTime.now().difference(last);
-    return left.isNegative ? null : left;
-  }
+  bool get canSend => AuthService.instance.currentUser != null;
 
   /// Kimlik sunucudan gelir — istemci userId/name gönderemez.
   Future<bool> send(String text) async {
@@ -140,11 +125,12 @@ class LobbyChatService extends ChangeNotifier {
     if (trimmed.isEmpty) return false;
     if (trimmed.length > maxMessageLength) return false;
     if (!canSend) return false;
-    if (AuthService.instance.currentUser == null) return false;
 
-    _sending = true;
-    _lastSendAt = DateTime.now();
-    notifyListeners();
+    unawaited(_dispatchSend(trimmed));
+    return true;
+  }
+
+  Future<void> _dispatchSend(String trimmed) async {
     try {
       final response = await _client.rpc(
         'send_lobby_chat',
@@ -153,21 +139,10 @@ class LobbyChatService extends ChangeNotifier {
       if (response is Map) {
         _push(LobbyChatMessage.fromMap(Map<String, dynamic>.from(response)));
       }
-      return true;
     } on PostgrestException catch (e) {
       debugPrint('LobbyChatService send: ${e.message}');
-      // Sunucu cooldown — yerel timer'ı bozma.
-      if (!e.message.toLowerCase().contains('chat_cooldown')) {
-        _lastSendAt = null;
-      }
-      return false;
     } catch (e, st) {
       debugPrint('LobbyChatService send: $e\n$st');
-      _lastSendAt = null;
-      return false;
-    } finally {
-      _sending = false;
-      notifyListeners();
     }
   }
 

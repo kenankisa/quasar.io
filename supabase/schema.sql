@@ -132,7 +132,7 @@ begin
       12
     ),
     new.raw_user_meta_data->>'avatar_url',
-    20,
+    25,
     0,
     'default',
     timezone('utc', now())

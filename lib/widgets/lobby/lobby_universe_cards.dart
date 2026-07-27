@@ -132,39 +132,49 @@ class LobbyMiniTrophies extends StatelessWidget {
   final bool showAll;
   final double size;
 
+  Color _passiveTrophyColor(int index, int filled) {
+    if (index < filled) {
+      return const Color(0xFFFFD54F).withValues(alpha: locked ? 0.55 : 1);
+    }
+    final passive = Color.lerp(accent, const Color(0xFFFFE0A8), 0.45)!;
+    return passive.withValues(alpha: locked ? 0.52 : 0.42);
+  }
+
   @override
   Widget build(BuildContext context) {
     final filled = lit.clamp(0, slots);
     final show = showAll ? slots : math.min(slots, 5);
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < show; i++)
-            Padding(
-              padding: EdgeInsets.only(right: i < show - 1 ? 2 : 0),
-              child: Icon(
-                Icons.emoji_events_rounded,
-                size: size,
-                color: i < filled
-                    ? const Color(0xFFFFD54F)
-                        .withValues(alpha: locked ? 0.45 : 1)
-                    : accent.withValues(alpha: locked ? 0.12 : 0.25),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        final gap = show > 6 ? 1.5 : 2.0;
+        final iconSize = maxW.isFinite && show > 0
+            ? math.max(4.0, math.min(size, (maxW - gap * (show - 1)) / show))
+            : size;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < show; i++)
+              Padding(
+                padding: EdgeInsets.only(right: i < show - 1 ? gap : 0),
+                child: Icon(
+                  Icons.emoji_events_rounded,
+                  size: iconSize,
+                  color: _passiveTrophyColor(i, filled),
+                ),
               ),
-            ),
-          if (!showAll && slots > show)
-            Text(
-              '+${slots - show}',
-              style: TextStyle(
-                color: accent.withValues(alpha: 0.5),
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
+            if (!showAll && slots > show)
+              Text(
+                '+${slots - show}',
+                style: TextStyle(
+                  color: accent.withValues(alpha: 0.55),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1101,7 +1111,7 @@ class LobbySingularityUniverseCard extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           opacity: locked ? 0.78 : 1,
           child: Container(
-            height: r.h(128),
+            height: r.h(132),
             decoration: _universeGlowDecoration(
               roomType: RoomType.hardcore,
               locked: locked,
@@ -1136,20 +1146,21 @@ class LobbySingularityUniverseCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       SizedBox(
-                        width: 80,
+                        width: 72,
                         child: WormholeGateBadge(
                           roomType: RoomType.hardcore,
                           spin: portalAnimation,
                           locked: locked,
-                          width: 80,
+                          width: 72,
                           overlay: true,
                         ),
                       ),
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 12, 12, 12),
+                          padding: const EdgeInsets.fromLTRB(6, 10, 4, 10),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Row(
                                 children: [
@@ -1160,25 +1171,19 @@ class LobbySingularityUniverseCard extends StatelessWidget {
                                   const Spacer(),
                                   Icon(
                                     Icons.local_fire_department_rounded,
-                                    size: 14,
+                                    size: 13,
                                     color: ember.withValues(alpha: 0.8),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 4),
-                              SizedBox(
-                                height: r.sp(17) * 1.2,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: CompactUniverseTitle(
-                                    text: title,
-                                    roomType: RoomType.hardcore,
-                                    locked: locked,
-                                    fontSize: r.sp(17),
-                                  ),
-                                ),
+                              const SizedBox(height: 3),
+                              CompactUniverseTitle(
+                                text: title,
+                                roomType: RoomType.hardcore,
+                                locked: locked,
+                                fontSize: r.sp(15.5),
                               ),
-                              const Spacer(),
+                              const SizedBox(height: 6),
                               Row(
                                 children: [
                                   LobbyPlayerCountPill(
@@ -1186,8 +1191,9 @@ class LobbySingularityUniverseCard extends StatelessWidget {
                                     accent: accent,
                                     locked: locked,
                                     inferno: true,
+                                    compact: true,
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                   Expanded(
                                     child: LobbyMiniTrophies(
                                       lit: trophyLit,
@@ -1195,7 +1201,7 @@ class LobbySingularityUniverseCard extends StatelessWidget {
                                       accent: accent,
                                       locked: locked,
                                       showAll: true,
-                                      size: 10,
+                                      size: 9,
                                     ),
                                   ),
                                 ],
@@ -1204,30 +1210,32 @@ class LobbySingularityUniverseCard extends StatelessWidget {
                                 const SizedBox(height: 4),
                                 Text(
                                   subtitle!,
-                                  maxLines: 1,
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: accent.withValues(alpha: 0.85),
-                                    fontSize: r.sp(10),
+                                    color: ember.withValues(alpha: 0.88),
+                                    fontSize: r.sp(9.5),
                                     fontWeight: FontWeight.w600,
+                                    height: 1.2,
                                   ),
                                 ),
                               ],
-                              const SizedBox(height: 8),
-                              locked
-                                  ? Align(
-                                      alignment: Alignment.centerRight,
-                                      child: LobbyLockChip(accent: accent),
-                                    )
-                                  : LobbyPlayChip(
-                                      accent: accent,
-                                      label: playLabel,
-                                      onTap: onPlay,
-                                      inferno: true,
-                                      expanded: true,
-                                    ),
                             ],
                           ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
+                        child: Center(
+                          child: locked
+                              ? LobbyLockChip(accent: accent, compact: true)
+                              : LobbyPlayChip(
+                                  accent: accent,
+                                  label: playLabel,
+                                  onTap: onPlay,
+                                  inferno: true,
+                                  compact: true,
+                                ),
                         ),
                       ),
                     ],

@@ -154,6 +154,7 @@ class OrbitGame extends FlameGame with PanDetector {
 
   bool get isBotHost =>
       !isBotOnlyRoom &&
+      roomType.allowsBots &&
       (network.forceBotAuthority || electedBotHostId == playerId);
 
   BotDifficulty get effectiveBotDifficulty => FirstMatchTuning.adjustBotDifficulty(

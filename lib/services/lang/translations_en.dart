@@ -779,7 +779,7 @@ const Map<String, String> kEnTranslations = {
           'Collect shield power-ups to temporarily ignore gravity from larger black holes.',
       'how_to_play_victory_title': 'Victory',
       'how_to_play_victory_desc':
-          'Grow to radius 500 to finish the match (550 in Unique universes) — the universe closes for everyone. Normal: 1st +5, 2nd +3, 3rd +2 (−1 on elimination). Elite: 1st +10, 2nd +6, 3rd +4 (−2 on elimination). Unique: 1st +15, 2nd +10, 3rd +5 (−3 on elimination). Diamonds never go below 0. New players start with 20 Diamonds.',
+          'Grow to radius 500 to finish the match (550 in Unique universes) — the universe closes for everyone. Normal: 1st +5, 2nd +3, 3rd +2 (−1 on elimination). Elite: 1st +10, 2nd +6, 3rd +4 (−2 on elimination). Unique: 1st +15, 2nd +10, 3rd +5 (−3 on elimination). Diamonds never go below 0. New players start with 25 Diamonds.',
       'how_to_play_ranks_title': 'Rank system',
       'how_to_play_ranks_desc':
           'Your star rank (Nebula → Singularity) is based on win points, not Diamonds.\n'
@@ -789,7 +789,7 @@ const Map<String, String> kEnTranslations = {
           'Games Won also excludes Training. World Rank defaults to win points (Rank tab); Wealth tab sorts by Diamonds.',
       'how_to_play_currencies_title': 'Currencies',
       'how_to_play_currencies_desc':
-          'New accounts start with 20 Diamonds. Tutorial Universe is free. Normal universes need at least 25 Diamonds. Diamonds unlock Elite (100) and Unique (200) universes.',
+          'New accounts start with 25 Diamonds. Tutorial Universe is free. Normal universes unlock at 25 Diamonds. Diamonds unlock Elite (100) and Unique (200) universes.',
       'how_to_play_events_title': 'Cosmic Events',
       'how_to_play_events_desc':
           'Watch for Quasar Storms, Supernovas, Meteor Showers, and more — they change the battlefield dramatically.',
@@ -912,7 +912,7 @@ const Map<String, String> kEnTranslations = {
       'v17_change_match_rewards':
           'Earn and lose Diamonds based on match results — podium rewards up to +15/+10/+5 in Unique universes and elimination penalties of −1/−2/−3 by tier. Results are saved server-side.',
       'v17_change_diamond_gates':
-          'New accounts start with 20 Diamonds. Tutorial is free; Normal requires 25, Elite 100, Unique 200. Lobby cards show entry costs, rewards, and penalties.',
+          'New accounts start with 25 Diamonds. Tutorial is free; Normal unlocks at 25, Elite 100, Unique 200. Lobby cards show entry costs, rewards, and penalties.',
       'v17_change_profile_hub':
           'Tap your avatar in the lobby for a 3-tab profile: Stats, Skins, and Store. Games won, global rank, and live profile sync via Supabase.',
       'v17_change_edit_profile':

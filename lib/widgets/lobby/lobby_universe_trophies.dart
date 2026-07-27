@@ -59,7 +59,8 @@ class _TrophyCup extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = active
         ? LobbyUniverseTrophies._litGold.withValues(alpha: dimmed ? 0.55 : 1)
-        : Colors.white.withValues(alpha: dimmed ? 0.12 : 0.22);
+        : Color.lerp(accent, const Color(0xFFFFE0A8), 0.45)!
+            .withValues(alpha: dimmed ? 0.5 : 0.42);
     return Container(
       width: 22,
       height: 22,
@@ -68,12 +69,13 @@ class _TrophyCup extends StatelessWidget {
         color: active
             ? LobbyUniverseTrophies._litGold
                 .withValues(alpha: dimmed ? 0.1 : 0.16)
-            : Colors.white.withValues(alpha: 0.04),
+            : accent.withValues(alpha: dimmed ? 0.14 : 0.1),
         border: Border.all(
           color: active
               ? LobbyUniverseTrophies._litGold
                   .withValues(alpha: dimmed ? 0.35 : 0.65)
-              : accent.withValues(alpha: dimmed ? 0.15 : 0.28),
+              : Color.lerp(accent, const Color(0xFFFFE0A8), 0.4)!
+                  .withValues(alpha: dimmed ? 0.45 : 0.38),
         ),
       ),
       child: Icon(

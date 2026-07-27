@@ -38,6 +38,14 @@ class _LoginScreenState extends State<LoginScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final blockKey =
+        PlayerSessionService.instance.takeSessionBlockMessageKey();
+    if (blockKey != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _errorMessage = context.lang.t(blockKey));
+      });
+    }
     _particleController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 20),
