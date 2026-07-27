@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/scheduler.dart';
 import '../game/config/room_visual_theme.dart';
 import '../game/config/universe_palette.dart';
 import '../game/room_type.dart';
+import 'lobby/lobby_wormhole_painter.dart';
 
 /// Lobby card wormhole chamber — larger glyph, painted once, spun cheaply.
 class WormholeGateBadge extends StatelessWidget {
@@ -144,8 +146,8 @@ class WormholeGateBadge extends StatelessWidget {
               animation: spin,
               builder: (context, child) {
                 return Transform.rotate(
-                  // Slow drift — one turn per particle loop ≈ 25s.
-                  angle: spin.value * math.pi * 2 * (1.0 + tier * 0.02),
+                  // Exactly one seamless revolution per animation loop.
+                  angle: spin.value * math.pi * 2,
                   child: child,
                 );
               },
@@ -195,6 +197,17 @@ class WormholeGateBadge extends StatelessWidget {
   }
 }
 
+/// Screen-space origin for a lobby wormhole dive.
+class WormholePortalFocal {
+  const WormholePortalFocal({
+    required this.center,
+    required this.diameter,
+  });
+
+  final Offset center;
+  final double diameter;
+}
+
 /// Continuous wormhole transit: travel while work runs, then dive when ready.
 /// User never sees a loading spinner — the portal itself covers the wait.
 class WormholeTransit {
@@ -206,14 +219,18 @@ class WormholeTransit {
   /// Starts the portal immediately. Keep it up while matchmaking/load runs.
   static Future<WormholeTransit> begin(
     BuildContext context,
-    RoomType roomType,
-  ) async {
+    RoomType roomType, {
+    Offset? portalCenter,
+    double? portalDiameter,
+  }) async {
     final holder = _TransitStateHolder();
     late final OverlayEntry entry;
     entry = OverlayEntry(
       builder: (_) => _WormholeTransitOverlay(
         roomType: roomType,
         holder: holder,
+        portalCenter: portalCenter,
+        portalDiameter: portalDiameter,
       ),
     );
     Overlay.of(context, rootOverlay: true).insert(entry);
@@ -263,10 +280,14 @@ class _WormholeTransitOverlay extends StatefulWidget {
   const _WormholeTransitOverlay({
     required this.roomType,
     required this.holder,
+    this.portalCenter,
+    this.portalDiameter,
   });
 
   final RoomType roomType;
   final _TransitStateHolder holder;
+  final Offset? portalCenter;
+  final double? portalDiameter;
 
   @override
   State<_WormholeTransitOverlay> createState() =>
@@ -350,8 +371,11 @@ class _WormholeTransitOverlayState extends State<_WormholeTransitOverlay>
   Widget build(BuildContext context) {
     final theme = RoomVisualTheme.forRoom(widget.roomType);
     final washA = UniversePalette.washA(widget.roomType);
-    final washB = UniversePalette.washB(widget.roomType);
     final hardcore = isHardcore;
+    final size = MediaQuery.sizeOf(context);
+    final screenCenter = Offset(size.width / 2, size.height / 2);
+    final startCenter = widget.portalCenter ?? screenCenter;
+    final startDiameter = widget.portalDiameter ?? (hardcore ? 150.0 : 110.0);
 
     return IgnorePointer(
       child: FadeTransition(
@@ -360,29 +384,41 @@ class _WormholeTransitOverlayState extends State<_WormholeTransitOverlay>
           animation: Listenable.merge([_spin, _breathe, _dive, _emberPulse]),
           builder: (context, child) {
             final diveT = Curves.easeInCubic.transform(_dive.value);
+            final travelApproach = _diving
+                ? 0.0
+                : 0.06 + _breathe.value * (hardcore ? 0.24 : 0.14);
+            final approach = _diving
+                ? Curves.easeInQuad.transform(diveT)
+                : travelApproach;
+
+            final portalCenter = Offset(
+              ui.lerpDouble(startCenter.dx, screenCenter.dx, diveT)!,
+              ui.lerpDouble(startCenter.dy, screenCenter.dy, diveT)!,
+            );
+
+            final basePaintSize = startDiameter * 1.45;
+            final maxDim = math.max(size.width, size.height);
             final breath = hardcore
-                ? 0.88 + _breathe.value * 0.28
-                : 0.88 + _breathe.value * 0.14;
-            final travelScale = _diving ? 1.0 : breath;
-            final scale =
-                travelScale + diveT * (hardcore ? 7.2 : 3.6);
-            final veil = (diveT * (hardcore ? 1.45 : 1.2)).clamp(0.0, 1.0);
-            final spinAngle = _spin.value * math.pi * 2 +
-                diveT * math.pi * (hardcore ? 3.4 : 1.15);
+                ? 0.94 + _breathe.value * 0.12
+                : 0.96 + _breathe.value * 0.06;
+            final travelSize = basePaintSize * (_diving ? 1.0 : breath);
+            final portalSize = ui.lerpDouble(
+              travelSize,
+              maxDim * 3.4,
+              diveT,
+            )!;
+
+            final veil = (diveT * 1.18).clamp(0.0, 1.0);
+            final bgAlpha = (1 - diveT * 0.4).clamp(0.0, 1.0);
             final ember = hardcore ? _emberPulse.value : 0.0;
-            final shock = hardcore
-                ? Curves.easeOutCubic.transform(
-                    ((_dive.value - 0.08) / 0.55).clamp(0.0, 1.0),
-                  )
-                : 0.0;
+            final alignX = (portalCenter.dx / size.width - 0.5) * 2;
+            final alignY = (portalCenter.dy / size.height - 0.5) * 2;
 
             return ColoredBox(
               color: Color.lerp(
-                hardcore
-                    ? const Color(0xF0180502)
-                    : const Color(0xF0020208),
+                const Color(0xF0020208),
                 Colors.black,
-                veil,
+                veil * 0.9,
               )!,
               child: Stack(
                 fit: StackFit.expand,
@@ -390,164 +426,58 @@ class _WormholeTransitOverlayState extends State<_WormholeTransitOverlay>
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: RadialGradient(
-                        radius: 1.2 - diveT * 0.5,
-                        colors: hardcore
-                            ? [
-                                const Color(0xFFFF2A0A).withValues(
-                                  alpha: (0.52 + ember * 0.22) *
-                                      (1 - diveT * 0.7),
-                                ),
-                                const Color(0xFFFF8A18).withValues(
-                                  alpha: 0.28 * (1 - diveT),
-                                ),
-                                const Color(0xFFFFB020).withValues(
-                                  alpha: 0.16 * (1 - diveT),
-                                ),
-                                washB.withValues(alpha: 0.2 * (1 - diveT)),
-                                const Color(0xFF050100),
-                              ]
-                            : [
-                                washA.withValues(
-                                  alpha: 0.34 * (1 - diveT * 0.8),
-                                ),
-                                washB.withValues(alpha: 0.16 * (1 - diveT)),
-                                const Color(0xFF020208),
-                              ],
+                        center: Alignment(alignX, alignY),
+                        radius: 0.35 + diveT * 1.5,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.28 * bgAlpha),
+                          Colors.black.withValues(alpha: 0.72 * veil),
+                        ],
+                        stops: [0.0, 0.38 + diveT * 0.28, 1.0],
                       ),
                     ),
                   ),
-                  if (hardcore)
-                    Opacity(
-                      opacity: (0.65 + ember * 0.35) * (1 - veil * 0.65),
-                      child: CustomPaint(
-                        painter: _HardcoreTransitEmberPainter(
-                          progress: _spin.value,
-                          pulse: ember,
-                        ),
-                      ),
-                    ),
-                  if (hardcore)
-                    Opacity(
-                      opacity: (0.55 + ember * 0.3) * (1 - veil * 0.8),
-                      child: CustomPaint(
-                        painter: _HardcoreTransitArcPainter(
-                          progress: _spin.value,
-                          pulse: ember,
-                        ),
-                      ),
-                    ),
-                  // Counter-rotating outer magma ring (hardcore only).
-                  if (hardcore)
-                    Center(
-                      child: Transform.scale(
-                        scale: scale * 1.08,
-                        child: Transform.rotate(
-                          angle: -spinAngle * 0.55,
-                          child: Opacity(
-                            opacity: (0.7 + ember * 0.25) * (1 - veil * 0.5),
-                            child: SizedBox(
-                              width: 260,
-                              height: 260,
-                              child: CustomPaint(
-                                painter: _HardcoreOuterRingPainter(
-                                  pulse: ember,
-                                ),
-                              ),
+                  if (bgAlpha > 0.04)
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          center: Alignment(alignX, alignY),
+                          radius: 0.45 + diveT * 0.9,
+                          colors: [
+                            washA.withValues(
+                              alpha: 0.2 * bgAlpha * (1 + ember * 0.35),
                             ),
-                          ),
+                            theme.secondaryAccent.withValues(
+                              alpha: 0.06 * bgAlpha,
+                            ),
+                            Colors.transparent,
+                          ],
                         ),
                       ),
                     ),
-                  Center(
-                    child: Transform.scale(
-                      scale: scale,
-                      child: Transform.rotate(
-                        angle: spinAngle,
-                        child: SizedBox(
-                          width: hardcore ? 220 : 150,
-                          height: hardcore ? 220 : 150,
-                          child: CustomPaint(
-                            painter: hardcore
-                                ? HardcoreWormholePainter(pulse: ember)
-                                : StaticWormholePainter(
-                                    accent: theme.accent,
-                                    secondary: theme.secondaryAccent,
-                                    locked: false,
-                                    bloom: washA,
-                                    rich: true,
-                                    ringCount: theme.wormholeRingCount,
-                                    richness: theme.wormholeRichness,
-                                  ),
-                          ),
-                        ),
+                  Positioned(
+                    left: portalCenter.dx - portalSize / 2,
+                    top: portalCenter.dy - portalSize / 2,
+                    width: portalSize,
+                    height: portalSize,
+                    child: CustomPaint(
+                      painter: LobbyWormholePainter(
+                        accent: theme.accent,
+                        secondary: theme.secondaryAccent,
+                        locked: false,
+                        bloom: washA,
+                        richness: theme.wormholeRichness,
+                        ringCount: theme.wormholeRingCount,
+                        time: _spin.value + diveT * 1.2,
+                        approach: approach,
+                        hardcore: hardcore,
                       ),
                     ),
                   ),
-                  if (hardcore && shock > 0)
-                    Center(
-                      child: Opacity(
-                        opacity: (1 - shock) * 0.85,
-                        child: Transform.scale(
-                          scale: 0.4 + shock * 4.8,
-                          child: Container(
-                            width: 180,
-                            height: 180,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Color.lerp(
-                                  const Color(0xFFFFE082),
-                                  const Color(0xFFFF2A0A),
-                                  shock,
-                                )!
-                                    .withValues(alpha: 0.75 * (1 - shock)),
-                                width: 3.5 - shock * 2.2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFFF3A1A)
-                                      .withValues(alpha: 0.45 * (1 - shock)),
-                                  blurRadius: 28,
-                                  spreadRadius: 4,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (hardcore && !_diving)
-                    Center(
-                      child: Transform.scale(
-                        scale: 1.45 + ember * 0.18,
-                        child: Opacity(
-                          opacity: 0.4 + ember * 0.3,
-                          child: Container(
-                            width: 260,
-                            height: 260,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: RadialGradient(
-                                colors: [
-                                  theme.accent.withValues(alpha: 0.42),
-                                  theme.secondaryAccent
-                                      .withValues(alpha: 0.16),
-                                  Colors.transparent,
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (veil > 0)
+                  if (veil > 0.02)
                     Opacity(
                       opacity: veil,
-                      child: ColoredBox(
-                        color: hardcore
-                            ? const Color(0xFF0A0200)
-                            : Colors.black,
-                      ),
+                      child: const ColoredBox(color: Colors.black),
                     ),
                 ],
               ),
@@ -919,113 +849,4 @@ class HardcoreWormholePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant HardcoreWormholePainter oldDelegate) =>
       oldDelegate.pulse != pulse;
-}
-
-class _HardcoreOuterRingPainter extends CustomPainter {
-  const _HardcoreOuterRingPainter({required this.pulse});
-
-  final double pulse;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final r = size.shortestSide * 0.46;
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2 + pulse * 1.4
-      ..color = const Color(0xFFFF6A20).withValues(alpha: 0.45 + pulse * 0.25);
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.scale(1.0, 0.55);
-    canvas.drawCircle(Offset.zero, r, paint);
-    paint
-      ..strokeWidth = 1.2
-      ..color = const Color(0xFFFFE082).withValues(alpha: 0.35 + pulse * 0.2);
-    canvas.drawCircle(Offset.zero, r * 0.82, paint);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _HardcoreOuterRingPainter oldDelegate) =>
-      oldDelegate.pulse != pulse;
-}
-
-class _HardcoreTransitArcPainter extends CustomPainter {
-  const _HardcoreTransitArcPainter({
-    required this.progress,
-    required this.pulse,
-  });
-
-  final double progress;
-  final double pulse;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    for (var i = 0; i < 8; i++) {
-      final a0 = progress * math.pi * 2 * (1.1 + i * 0.05) + i * 0.7;
-      final sweep = 0.55 + (i % 3) * 0.18 + pulse * 0.12;
-      final rad = size.shortestSide * (0.18 + i * 0.045);
-      paint
-        ..strokeWidth = 1.6 + (i.isEven ? 1.2 : 0.4)
-        ..color = Color.lerp(
-          const Color(0xFFFF3A1A),
-          const Color(0xFFFFE082),
-          i / 7,
-        )!
-            .withValues(alpha: 0.22 + pulse * 0.18);
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: rad),
-        a0,
-        sweep,
-        false,
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _HardcoreTransitArcPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.pulse != pulse;
-  }
-}
-
-class _HardcoreTransitEmberPainter extends CustomPainter {
-  const _HardcoreTransitEmberPainter({
-    required this.progress,
-    required this.pulse,
-  });
-
-  final double progress;
-  final double pulse;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final paint = Paint()..style = PaintingStyle.fill;
-    const count = 64;
-    for (var i = 0; i < count; i++) {
-      final a = progress * math.pi * 2 * (1.6 + (i % 5) * 0.09) +
-          i * 0.31;
-      final dist = size.shortestSide *
-          (0.1 + (i % 9) * 0.05 + pulse * 0.05);
-      final p = center +
-          Offset(math.cos(a) * dist, math.sin(a) * dist * 0.78);
-      paint.color = Color.lerp(
-        const Color(0xFFFF2A0A),
-        const Color(0xFFFFF0A0),
-        (i % 7) / 6,
-      )!
-          .withValues(alpha: 0.3 + (i % 5) * 0.08 + pulse * 0.15);
-      canvas.drawCircle(p, i.isEven ? 2.8 : 1.4, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _HardcoreTransitEmberPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.pulse != pulse;
-  }
 }

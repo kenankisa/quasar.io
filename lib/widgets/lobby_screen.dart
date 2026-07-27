@@ -70,7 +70,7 @@ class _LobbyScreenState extends State<LobbyScreen>
     _tabController = TabController(length: 2, vsync: this);
     _particleController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 25),
+      duration: const Duration(seconds: 16),
     )..repeat();
     _loadProfile();
     LobbyRoomStatsService.instance.attach();
@@ -265,7 +265,10 @@ class _LobbyScreenState extends State<LobbyScreen>
     );
   }
 
-  Future<void> _enterRoom(RoomType roomType) async {
+  Future<void> _enterRoom(
+    RoomType roomType,
+    WormholePortalFocal? focal,
+  ) async {
     if (_enteringRoom) return;
 
     final profile =
@@ -304,10 +307,19 @@ class _LobbyScreenState extends State<LobbyScreen>
 
     setState(() => _enteringRoom = true);
 
-    // Portal starts immediately — covers the whole wait (no loading circle).
     WormholeTransit? transit;
     try {
       RoomInstance? roomInstance;
+
+      if (roomType != RoomType.hardcore) {
+        if (!mounted) return;
+        transit = await WormholeTransit.begin(
+          context,
+          roomType,
+          portalCenter: focal?.center,
+          portalDiameter: focal?.diameter,
+        );
+      }
 
       // Hardcore: resolve seat/queue before the wormhole so queue UI is clear.
       if (roomType == RoomType.hardcore) {
@@ -328,8 +340,16 @@ class _LobbyScreenState extends State<LobbyScreen>
         }
       }
 
-      if (!mounted) return;
-      transit = await WormholeTransit.begin(context, roomType);
+      if (!mounted) {
+        transit?.dispose();
+        return;
+      }
+      transit ??= await WormholeTransit.begin(
+        context,
+        roomType,
+        portalCenter: focal?.center,
+        portalDiameter: focal?.diameter,
+      );
       if (!mounted) {
         transit.dispose();
         return;
