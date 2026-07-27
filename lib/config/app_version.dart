@@ -2,8 +2,8 @@
 class AppVersion {
   AppVersion._();
 
-  static const String current = '2.3.0';
-  static const int buildNumber = 13;
+  static const String current = '2.4.0';
+  static const int buildNumber = 14;
 
   static String get display => 'v$current';
 }

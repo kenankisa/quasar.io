@@ -331,9 +331,7 @@ class _MatchCommsControlsState extends State<MatchCommsControls> {
                               isActive: player.isBoostActive,
                               size: boostSize,
                               onActivate: () {
-                                if (player.tryActivateBoost()) {
-                                  game.hudTick.value++;
-                                }
+                                game.tryActivateBoost();
                               },
                             ),
                           ),

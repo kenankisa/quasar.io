@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../utils/lang_scope.dart';
 
+import '../../utils/diamond_ui.dart';
 import '../../game/config/first_match_tuning.dart';
 import '../../game/config/lobby_next_goal.dart';
 import '../../game/config/room_matchmaking.dart';
@@ -248,17 +249,13 @@ class _LobbyUniverseConstellationState extends State<LobbyUniverseConstellation>
               responsive: r,
             );
 
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: CustomPaint(
-                      painter: _ConstellationVignettePainter(),
-                    ),
-                  ),
-                ),
-                for (final slot in slots)
+            return SizedBox(
+              width: area.width,
+              height: area.height,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  for (final slot in slots)
                   _positionedPortal(
                     context: context,
                     lang: lang,
@@ -281,6 +278,7 @@ class _LobbyUniverseConstellationState extends State<LobbyUniverseConstellation>
                     ),
                   ),
               ],
+            ),
             );
           },
         );
@@ -427,47 +425,9 @@ class _ConstellationGoalChip extends StatelessWidget {
 
   IconData _iconFor(LobbyNextGoal goal) => switch (goal.kind) {
         LobbyNextGoalKind.training => Icons.school_outlined,
-        LobbyNextGoalKind.diamonds => Icons.diamond_outlined,
+        LobbyNextGoalKind.diamonds => kDiamondIcon,
         LobbyNextGoalKind.trophies => Icons.emoji_events_outlined,
       };
-}
-
-class _ConstellationVignettePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(0, -0.15),
-          radius: 1.05,
-          colors: [
-            Colors.transparent,
-            Colors.black.withValues(alpha: 0.18),
-            Colors.black.withValues(alpha: 0.42),
-          ],
-          stops: const [0.45, 0.82, 1.0],
-        ).createShader(rect),
-    );
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.black.withValues(alpha: 0.22),
-            Colors.transparent,
-            Colors.black.withValues(alpha: 0.28),
-          ],
-          stops: const [0.0, 0.42, 1.0],
-        ).createShader(rect),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 String _playerLabel(RoomLobbyStats stats, RoomType type) {

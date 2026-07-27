@@ -19,6 +19,20 @@ class VersionNotesDialog extends StatefulWidget {
   static const _hiddenVersionKey = 'quasar_whats_new_hidden_version';
   static bool _autoShownThisSession = false;
 
+  static const _v24ChangeKeys = [
+    'v24_change_wormhole_portals',
+    'v24_change_wormhole_reset',
+    'v24_change_session_gate',
+    'v24_change_lobby_chat',
+    'v24_change_starting_diamonds',
+    'v24_change_first_match',
+    'v24_change_match_hud',
+    'v24_change_growth_numbers',
+    'v24_change_size_hud',
+    'v24_change_lobby_starfield',
+    'v24_change_version_notes',
+  ];
+
   static const _v23ChangeKeys = [
     'v23_change_lobby_redesign',
     'v23_change_universe_cards',
@@ -304,14 +318,30 @@ class _VersionNotesDialogState extends State<VersionNotesDialog> {
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                       children: [
                         _VersionHeader(
+                          title: lang.t('v24_section_title'),
+                          subtitle: lang.t('v24_section_subtitle'),
+                        ),
+                        const SizedBox(height: 12),
+                        ...VersionNotesDialog._v24ChangeKeys.map(
+                          (key) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _ChangeItem(text: lang.t(key)),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _VersionHeader(
                           title: lang.t('v23_section_title'),
                           subtitle: lang.t('v23_section_subtitle'),
+                          dimmed: true,
                         ),
                         const SizedBox(height: 12),
                         ...VersionNotesDialog._v23ChangeKeys.map(
                           (key) => Padding(
                             padding: const EdgeInsets.only(bottom: 10),
-                            child: _ChangeItem(text: lang.t(key)),
+                            child: _ChangeItem(
+                              text: lang.t(key),
+                              dimmed: true,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),

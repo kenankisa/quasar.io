@@ -233,6 +233,20 @@ class MatchChampionResultText extends StatelessWidget {
   final int? rankPoints;
   final TextStyle? style;
 
+  /// Plain one-line champion summary (no inline badges) for compact result screens.
+  static String buildPlain({
+    required String template,
+    required String name,
+    required bool isBot,
+    required String time,
+    int? rankPoints,
+  }) {
+    final displayName = isBot ? botBaseName(name) : name;
+    return template
+        .replaceAll('{name}', displayName)
+        .replaceAll('{time}', time);
+  }
+
   @override
   Widget build(BuildContext context) {
     final baseStyle = style ??

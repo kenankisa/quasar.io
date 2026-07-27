@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../utils/lang_scope.dart';
 
+import '../../utils/diamond_ui.dart';
 import '../../game/models/admin_hardcore_live.dart';
 import '../../game/room_type.dart';
 import '../../services/admin_game_trial_service.dart';
@@ -677,7 +678,7 @@ class _DiamondBar extends StatelessWidget {
         Row(
           children: [
             Icon(
-              positive ? Icons.diamond_rounded : Icons.diamond_outlined,
+              kDiamondIcon,
               size: 14,
               color: color,
             ),

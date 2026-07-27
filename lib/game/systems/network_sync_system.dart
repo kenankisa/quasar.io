@@ -41,6 +41,22 @@ class NetworkSyncSystem {
     game.realtime.onRemoteVictory = game.lifecycle.handleRoomClosedByWinner;
     game.realtime.onRoomClosed = game.lifecycle.handleRoomClosedByWinner;
     game.realtime.onMatchSpeech = game.handleRemoteMatchSpeech;
+    if (game.roomType == RoomType.hardcore) {
+      game.realtime.onHardcoreElim = game.hardcoreArena.onRemoteElim;
+      game.realtime.onHardcoreArenaPhase = ({
+        required bool active,
+        String? phaseAtUtc,
+        String? anchorPlayerId,
+        double? anchorRadius,
+      }) {
+        game.hardcoreArena.applyArenaPhase(
+          active: active,
+          phaseAtUtc: phaseAtUtc,
+          anchorPlayerId: anchorPlayerId,
+          anchorRadius: anchorRadius,
+        );
+      };
+    }
 
     await game.realtime.joinRoom(
       roomType: game.roomType,

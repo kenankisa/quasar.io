@@ -799,7 +799,7 @@ const Map<String, String> kTrTranslations = {
       'version_current': 'Güncel sürüm: {version}',
       'version_notes_close': 'Kapat',
       'version_notes_dont_show': 'Bir daha gösterme',
-      'lobby_version_notes': 'v2.3',
+      'lobby_version_notes': 'v2.4',
       'v21_section_title': 'Sürüm 2.1',
       'v21_section_subtitle':
           'Galibiyet puanlı yıldız rütbeleri, daha adil Kazanılan Maç (Eğitim hariç), önce eğitim kilidi, sıralamada Galibiyetler, lobi sohbeti, gelen kutusu duyuruları ve canlı yönetici duyuruları.',

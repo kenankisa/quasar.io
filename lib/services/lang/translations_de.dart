@@ -498,7 +498,7 @@ const Map<String, String> kDeTranslations = {
       'version_current': 'Aktuelle Version: {version}',
       'version_notes_close': 'Schließen',
       'version_notes_dont_show': 'Nicht mehr anzeigen',
-      'lobby_version_notes': 'v2.3',
+      'lobby_version_notes': 'v2.4',
       'v21_section_title': 'Version 2.1',
       'v21_section_subtitle':
           'Siegpunkt-Sternränge, fairere Siege (Training ausgenommen), Tutorial-Sperre, Siege in der Weltrangliste, Lobby-Chat, Posteingangs-Ankündigungen und Live-Admin-Banner.',

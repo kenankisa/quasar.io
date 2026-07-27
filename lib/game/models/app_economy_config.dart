@@ -75,7 +75,7 @@ class AppEconomyConfig {
   final int trainingClaimsPerDay;
   final int adDoublesPerDay;
 
-  /// Defaults match Hardcore v2 package (victory 40 / kill 4·2 / elim −15).
+  /// Defaults match Hardcore v2 package (victory 40 / kill 4·2 / elim −10).
   static const defaults = AppEconomyConfig(
     rewardSimple1: 3,
     rewardSimple2: 2,
@@ -96,7 +96,7 @@ class AppEconomyConfig {
     penaltyNormal: 2,
     penaltyElite: 3,
     penaltyUnique: 4,
-    penaltyHardcore: 15,
+    penaltyHardcore: 10,
     unlockNormal: 25,
     unlockElite: 100,
     unlockUnique: 200,

@@ -32,6 +32,19 @@ void main() {
     'hardcore_gate_low_pop_cap_tooltip',
     'hardcore_onboarding_step_label',
     'lobby_version_notes',
+    'v24_change_wormhole_portals',
+    'v24_change_wormhole_reset',
+    'v24_change_session_gate',
+    'v24_change_lobby_chat',
+    'v24_change_starting_diamonds',
+    'v24_change_first_match',
+    'v24_change_match_hud',
+    'v24_change_growth_numbers',
+    'v24_change_size_hud',
+    'v24_change_lobby_starfield',
+    'v24_change_version_notes',
+    'v24_section_subtitle',
+    'v24_section_title',
     'v23_change_lobby_redesign',
     'v23_change_universe_cards',
     'v23_change_nasa_photos',
@@ -369,7 +382,7 @@ const _enTranslations = <String, String>{
   'lobby_tab_play': 'Play',
   'lobby_tab_social': 'Social',
   'lobby_trophies_progress': '{lit} of {slots} universe trophies',
-  'lobby_version_notes': 'v2.3',
+  'lobby_version_notes': 'v2.4',
   'match_day_diamond_progress': 'Today {earned} / {cap}',
   'match_day_diamond_tooltip':
       'Match diamonds earned today toward your daily cap. Resets at UTC midnight.',
@@ -400,6 +413,31 @@ const _enTranslations = <String, String>{
       'Display radius labels on other black holes during a match.',
   'settings_show_own_size': 'Show my size',
   'settings_show_own_size_desc': 'Display your radius label during a match.',
+  'v24_change_wormhole_portals':
+      'Constellation wormholes rebuilt with richer interior depth and seamless integer-loop rotation.',
+  'v24_change_wormhole_reset':
+      'Portal hover speed resets when you return to the lobby after a match — no more stuck fast-spin gates.',
+  'v24_change_session_gate':
+      'Session gate before lobby — your account is verified before entering (multi-device protection).',
+  'v24_change_lobby_chat':
+      'Lobby chat cooldown removed — send messages freely without waiting between posts.',
+  'v24_change_starting_diamonds':
+      'New accounts start with 25 diamonds — enough to unlock Normal right away.',
+  'v24_change_first_match':
+      'First-match bots tuned for gentler early training and smoother onboarding.',
+  'v24_change_match_hud':
+      'Match HUD rebuilt — live 6-player standings grid (3×2) with your rank pinned when you fall outside the top five.',
+  'v24_change_growth_numbers':
+      'Growth numbers — green +N and red −N popups when you gain or lose mass (toggle in Settings).',
+  'v24_change_size_hud':
+      'Live size badge — your current radius stays visible in the top-right corner during a match.',
+  'v24_change_lobby_starfield':
+      'Lobby play area now uses a scientific deep-space starfield with spectral star colors instead of neon particles.',
+  'v24_change_version_notes':
+      'What\'s New refreshed for v2.4 — match HUD, growth feedback, wormhole polish, and lobby upgrades at the top. Shows once in the lobby until you dismiss it.',
+  'v24_section_subtitle':
+      'Match HUD grid, growth numbers, live size badge, scientific lobby starfield, wormhole portals, session gate, and a friendlier start.',
+  'v24_section_title': 'Version 2.4',
   'v23_change_lobby_redesign':
       'Compact cosmic lobby — Play and Social tabs, streamlined header with diamonds, daily progress, chest, and inbox at a glance.',
   'v23_change_universe_cards':
@@ -716,7 +754,7 @@ const _trTranslations = <String, String>{
   'lobby_tab_play': 'Oyna',
   'lobby_tab_social': 'Sosyal',
   'lobby_trophies_progress': '{lit} / {slots} evren kupası',
-  'lobby_version_notes': 'v2.3',
+  'lobby_version_notes': 'v2.4',
   'match_day_diamond_progress': 'Bugün {earned} / {cap}',
   'match_day_diamond_tooltip':
       'Günlük üst sınıra doğru bugün kazanılan maç elmasları. UTC gece yarısında sıfırlanır.',
@@ -747,6 +785,31 @@ const _trTranslations = <String, String>{
       'Maç sırasında diğer kara deliklerin yarıçap etiketlerini göster.',
   'settings_show_own_size': 'Boyutumu göster',
   'settings_show_own_size_desc': 'Maç sırasında kendi yarıçap etiketinizi gösterin.',
+  'v24_change_wormhole_portals':
+      'Takımyıldız solucan kapıları yeniden yapıldı — daha zengin iç derinlik ve kesintisiz tam dönüş animasyonu.',
+  'v24_change_wormhole_reset':
+      'Maçtan lobiye dönünce portal yaklaşma hızı sıfırlanır — hover modunda takılı kalmaz.',
+  'v24_change_session_gate':
+      'Lobi öncesi oturum kapısı — hesabınız doğrulanmadan lobiye girilmez (çoklu cihaz koruması).',
+  'v24_change_lobby_chat':
+      'Lobi sohbeti bekleme süresi kaldırıldı — mesajlarınızı serbestçe gönderin.',
+  'v24_change_starting_diamonds':
+      'Yeni hesaplar 25 elmasla başlar — Normal evreni hemen açmaya yeter.',
+  'v24_change_first_match':
+      'İlk maç botları daha yumuşak eğitim ve akıcı onboarding için ayarlandı.',
+  'v24_change_match_hud':
+      'Maç HUD yenilendi — canlı 6 oyunculu sıralama tablosu (3×2); ilk beşte değilseniz sıranız sabitlenir.',
+  'v24_change_growth_numbers':
+      'Büyüme rakamları — kütle kazanınca yeşil +N, kaybedince kırmızı −N (Ayarlar\'dan açılıp kapatılır).',
+  'v24_change_size_hud':
+      'Canlı boyut rozeti — maç sırasında güncel yarıçapınız sağ üstte görünür.',
+  'v24_change_lobby_starfield':
+      'Lobi oyun alanı neon parçacıklar yerine spektral yıldız renkleriyle bilimsel derin uzay yıldız alanı kullanıyor.',
+  'v24_change_version_notes':
+      'Yenilikler v2.4 için güncellendi — maç HUD, büyüme geri bildirimi, solucan cilası ve lobi yükseltmeleri üstte. Lobide bir kez gösterilir; kapatana kadar.',
+  'v24_section_subtitle':
+      'Maç HUD tablosu, büyüme rakamları, canlı boyut rozeti, bilimsel lobi yıldız alanı, solucan kapıları, oturum kapısı ve kolay başlangıç.',
+  'v24_section_title': 'Sürüm 2.4',
   'v23_change_lobby_redesign':
       'Kompakt kozmik lobi — Oyna ve Sosyal sekmeleri; elmas, günlük ilerleme, sandık ve gelen kutusu tek bakışta.',
   'v23_change_universe_cards':

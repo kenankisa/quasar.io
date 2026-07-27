@@ -797,7 +797,7 @@ const Map<String, String> kEnTranslations = {
       'version_current': 'Current version: {version}',
       'version_notes_close': 'Close',
       'version_notes_dont_show': 'Don\'t show again',
-      'lobby_version_notes': 'v2.3',
+      'lobby_version_notes': 'v2.4',
       'v21_section_title': 'Version 2.1',
       'v21_section_subtitle':
           'Win-point star ranks, fairer Games Won (Training excluded), tutorial-first lock, Wins on the world leaderboard, lobby chat, inbox broadcasts, and live admin announcements.',

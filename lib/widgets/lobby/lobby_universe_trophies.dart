@@ -17,6 +17,9 @@ class LobbyUniverseTrophies extends StatelessWidget {
   final bool locked;
 
   static const _litGold = Color(0xFFFFD54F);
+  static const _passiveBorder = Color(0xFF6E7D98);
+  static const _passiveIcon = Color(0xFF8A97B0);
+  static const _passiveFill = Color(0xFF121620);
 
   @override
   Widget build(BuildContext context) {
@@ -58,25 +61,40 @@ class _TrophyCup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = active
-        ? LobbyUniverseTrophies._litGold.withValues(alpha: dimmed ? 0.55 : 1)
-        : Color.lerp(accent, const Color(0xFFFFE0A8), 0.45)!
-            .withValues(alpha: dimmed ? 0.5 : 0.42);
+        ? LobbyUniverseTrophies._litGold
+        : LobbyUniverseTrophies._passiveIcon
+            .withValues(alpha: dimmed ? 0.62 : 0.76);
     return Container(
       width: 22,
       height: 22,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
+        gradient: active
+            ? RadialGradient(
+                colors: [
+                  const Color(0xFFFFF176).withValues(alpha: 0.38),
+                  LobbyUniverseTrophies._litGold.withValues(alpha: 0.16),
+                ],
+              )
+            : null,
         color: active
-            ? LobbyUniverseTrophies._litGold
-                .withValues(alpha: dimmed ? 0.1 : 0.16)
-            : accent.withValues(alpha: dimmed ? 0.14 : 0.1),
+            ? null
+            : LobbyUniverseTrophies._passiveFill.withValues(alpha: 0.78),
         border: Border.all(
           color: active
-              ? LobbyUniverseTrophies._litGold
-                  .withValues(alpha: dimmed ? 0.35 : 0.65)
-              : Color.lerp(accent, const Color(0xFFFFE0A8), 0.4)!
-                  .withValues(alpha: dimmed ? 0.45 : 0.38),
+              ? LobbyUniverseTrophies._litGold.withValues(alpha: 0.92)
+              : LobbyUniverseTrophies._passiveBorder
+                  .withValues(alpha: dimmed ? 0.58 : 0.72),
+          width: active ? 1.1 : 1,
         ),
+        boxShadow: active
+            ? [
+                BoxShadow(
+                  color: LobbyUniverseTrophies._litGold.withValues(alpha: 0.32),
+                  blurRadius: 5,
+                ),
+              ]
+            : null,
       ),
       child: Icon(
         Icons.emoji_events_rounded,

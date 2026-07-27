@@ -13,6 +13,7 @@ class LobbyCosmicPanel extends StatelessWidget {
     this.secondary = const Color(0xFF7020C0),
     this.showStars = true,
     this.glowStrength = 0.12,
+    this.backgroundOpacity = 1,
   });
 
   final Widget child;
@@ -22,6 +23,7 @@ class LobbyCosmicPanel extends StatelessWidget {
   final Color secondary;
   final bool showStars;
   final double glowStrength;
+  final double backgroundOpacity;
 
   @override
   Widget build(BuildContext context) {
@@ -58,9 +60,10 @@ class LobbyCosmicPanel extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      const Color(0xFF0C1438).withValues(alpha: 0.92),
-                      const Color(0xFF060818),
-                      const Color(0xFF120A28),
+                      const Color(0xFF0C1438)
+                          .withValues(alpha: 0.92 * backgroundOpacity),
+                      const Color(0xFF060818).withValues(alpha: backgroundOpacity),
+                      const Color(0xFF120A28).withValues(alpha: backgroundOpacity),
                     ],
                   ),
                 ),

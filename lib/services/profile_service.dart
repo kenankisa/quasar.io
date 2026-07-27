@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../game/config/skill_tree_config.dart';
 import '../game/room_type.dart';
+import '../models/daily_quest.dart';
 import '../utils/player_name.dart';
 import '../utils/player_rank.dart';
 import 'admin_access.dart';
@@ -278,6 +279,7 @@ class ProfileService {
         _publishProfile(null);
         dailyChestAvailable.value = null;
         dailyChestNextAvailableAt.value = null;
+        dailyQuestsStatusNotifier.value = null;
         matchDayDiamondNotifier.value = null;
       }
     });
@@ -306,6 +308,10 @@ class ProfileService {
   /// Rolling 24h match placement diamonds vs economy cap (reward UI).
   final ValueNotifier<MatchDayDiamondStatus?> matchDayDiamondNotifier =
       ValueNotifier<MatchDayDiamondStatus?>(null);
+
+  /// Today's daily quests (3 assigned from the pool).
+  final ValueNotifier<DailyQuestsStatus?> dailyQuestsStatusNotifier =
+      ValueNotifier<DailyQuestsStatus?>(null);
 
   void _publishProfile(PlayerProfile? profile) {
     profileNotifier.value = profile;
@@ -941,6 +947,66 @@ class ProfileService {
       debugPrint('claimDailyLobbyChest failed: $e\n$st');
       _publishProfile(previous);
       return const DailyChestClaimResult(ok: false, reason: 'unknown');
+    }
+  }
+
+  /// UTC daily quests — assigns 1 easy + 1 medium + 1 hard if missing.
+  Future<DailyQuestsStatus?> fetchDailyQuestsStatus() async {
+    final userId = _userId;
+    if (userId == null) {
+      dailyQuestsStatusNotifier.value = null;
+      return null;
+    }
+    try {
+      final response = await _client.rpc('get_daily_quests_status');
+      final status = DailyQuestsStatus.fromRpc(response);
+      dailyQuestsStatusNotifier.value = status;
+      return status;
+    } catch (e, st) {
+      debugPrint('fetchDailyQuestsStatus failed: $e\n$st');
+      return dailyQuestsStatusNotifier.value;
+    }
+  }
+
+  /// Sync per-match stats toward today's daily quest progress.
+  Future<DailyQuestsStatus?> reportDailyQuestMatch({
+    required RoomType roomType,
+    int? placement,
+    bool eliminated = false,
+    required double peakRadius,
+    required double survivalSeconds,
+    required int particlesAbsorbed,
+    required int playerKills,
+    required int botKills,
+    required int shieldUses,
+    bool matchCompleted = true,
+  }) async {
+    if (_userId == null) return null;
+    try {
+      final response = await _client.rpc(
+        'report_daily_quest_match',
+        params: {
+          'p_room_type': roomType.name,
+          'p_placement': eliminated ? null : placement,
+          'p_eliminated': eliminated,
+          'p_peak_radius': peakRadius,
+          'p_survival_seconds': survivalSeconds,
+          'p_particles_absorbed': particlesAbsorbed,
+          'p_player_kills': playerKills,
+          'p_bot_kills': botKills,
+          'p_shield_uses': shieldUses,
+          'p_match_completed': matchCompleted,
+        },
+      );
+      final status = DailyQuestsStatus.fromRpc(response);
+      dailyQuestsStatusNotifier.value = status;
+      if (status.grantsTotal > 0) {
+        unawaited(fetchProfile());
+      }
+      return status;
+    } catch (e, st) {
+      debugPrint('reportDailyQuestMatch failed: $e\n$st');
+      return dailyQuestsStatusNotifier.value;
     }
   }
 }

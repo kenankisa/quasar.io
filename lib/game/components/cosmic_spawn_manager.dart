@@ -58,6 +58,7 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
   GrowthSystem get _growth => game.matchRules.growthContext(
         matchElapsed: game.matchElapsed,
         isBotOnlyRoom: game.isBotOnlyRoom,
+        extraFoodMultiplier: game.hardcoreArena.foodGrowthMultiplier(),
       );
 
   Duration get _collectibleRespawnDelay => Duration(
@@ -471,6 +472,9 @@ class CosmicSpawnManager extends Component with HasGameReference<OrbitGame> {
 
   void _applyGrowth(double amount, BlackHolePartner consumer) {
     final isPlayer = consumer == game.player;
+    if (isPlayer) {
+      game.matchStats.recordParticle();
+    }
     final partner = isPlayer ? game.tacticalManager.activeLinkPartner : null;
     _growth.apply(
       amount,

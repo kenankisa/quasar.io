@@ -497,7 +497,7 @@ const Map<String, String> kRuTranslations = {
       'version_current': 'Текущая версия: {version}',
       'version_notes_close': 'Закрыть',
       'version_notes_dont_show': 'Больше не показывать',
-      'lobby_version_notes': 'v2.3',
+      'lobby_version_notes': 'v2.4',
       'v21_section_title': 'Версия 2.1',
       'v21_section_subtitle':
           'Звёздные ранги за очки побед, честный счёт побед (тренировка не считается), сначала обучение, колонка побед, чат лобби, объявления во входящие и живые баннеры.',

@@ -30,11 +30,13 @@ class MatchRules {
   GrowthSystem growthContext({
     required double matchElapsed,
     required bool isBotOnlyRoom,
+    double extraFoodMultiplier = 1.0,
   }) =>
       GrowthSystem(
         foodGrowthMultiplier: room.foodGrowthMultiplier,
         pacing: pacing,
         matchElapsed: matchElapsed,
         isBotOnlyRoom: isBotOnlyRoom,
+        extraFoodMultiplier: extraFoodMultiplier,
       );
 }

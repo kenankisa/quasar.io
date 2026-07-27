@@ -10,12 +10,14 @@ class GrowthSystem {
     required this.pacing,
     required this.matchElapsed,
     required this.isBotOnlyRoom,
+    this.extraFoodMultiplier = 1.0,
   });
 
   final double foodGrowthMultiplier;
   final MatchPacing pacing;
   final double matchElapsed;
   final bool isBotOnlyRoom;
+  final double extraFoodMultiplier;
 
   /// Scales a raw growth amount for [consumer] without applying it.
   double scaledAmount(
@@ -24,7 +26,7 @@ class GrowthSystem {
     bool applyEarlyGameBonus = false,
     BotPlayer? bot,
   }) {
-    var amount = base * foodGrowthMultiplier;
+    var amount = base * foodGrowthMultiplier * extraFoodMultiplier;
     if (applyEarlyGameBonus &&
         matchElapsed <= pacing.earlyGameDurationSeconds) {
       amount *= pacing.earlyGamePlayerGrowthMultiplier;

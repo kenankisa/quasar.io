@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../utils/lang_scope.dart';
 
 import '../../utils/responsive_layout.dart';
+import '../../utils/diamond_ui.dart';
 import '../daily_chest_lobby_button.dart';
+import '../daily_quests_lobby_button.dart';
 import '../profile_avatar.dart';
 import 'lobby_cosmic_chrome.dart';
 
@@ -20,6 +22,11 @@ class LobbyCompactHeader extends StatelessWidget {
     required this.dailyChestAvailable,
     this.dailyChestNextAvailableAt,
     required this.onDailyChestTap,
+    required this.dailyQuestsLoaded,
+    required this.dailyQuestInProgressCount,
+    required this.dailyQuestAllComplete,
+    this.dailyQuestNextResetAt,
+    required this.onDailyQuestsTap,
     required this.onMessagesTap,
     required this.onSettingsTap,
     required this.onMenuTap,
@@ -36,6 +43,11 @@ class LobbyCompactHeader extends StatelessWidget {
   final bool? dailyChestAvailable;
   final DateTime? dailyChestNextAvailableAt;
   final VoidCallback onDailyChestTap;
+  final bool dailyQuestsLoaded;
+  final int dailyQuestInProgressCount;
+  final bool dailyQuestAllComplete;
+  final DateTime? dailyQuestNextResetAt;
+  final VoidCallback onDailyQuestsTap;
   final VoidCallback onMessagesTap;
   final VoidCallback onSettingsTap;
   final VoidCallback onMenuTap;
@@ -167,6 +179,15 @@ class LobbyCompactHeader extends StatelessWidget {
                           cap: matchDayCap!,
                         )
                       : _MatchDayStripPlaceholder(compact: compact),
+                ),
+                SizedBox(width: r.w(6)),
+                DailyQuestsLobbyButton(
+                  loaded: !loading && dailyQuestsLoaded,
+                  inProgressCount: dailyQuestInProgressCount,
+                  allComplete: dailyQuestAllComplete,
+                  nextResetAt: dailyQuestNextResetAt,
+                  onTap: loading ? null : onDailyQuestsTap,
+                  compact: true,
                 ),
                 SizedBox(width: r.w(6)),
                 DailyChestLobbyButton(
@@ -387,9 +408,7 @@ class _DiamondChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.diamond_outlined,
-            color: const Color(0xFF00F0FF),
+          DiamondIcon(
             size: r.sp(compact ? 14 : 16),
           ),
           SizedBox(width: r.w(4)),
@@ -458,12 +477,7 @@ class _MatchDayStrip extends StatelessWidget {
     final lang = context.lang;
     final r = ResponsiveLayout.of(context);
     final progress = (earned / cap).clamp(0.0, 1.0);
-    final full = progress >= 1.0;
-    final color = full
-        ? const Color(0xFFFF6688)
-        : progress >= 0.75
-            ? const Color(0xFFFFD24A)
-            : const Color(0xFF00F0FF);
+    const color = kDiamondColor;
 
     return Container(
       height: r.w(34),
@@ -482,7 +496,7 @@ class _MatchDayStrip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.diamond_rounded, size: r.sp(12), color: color),
+          DiamondIcon(size: r.sp(12), color: color),
           SizedBox(width: r.w(6)),
           Expanded(
             child: ClipRRect(
@@ -534,7 +548,7 @@ class _MatchDayStripPlaceholder extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.diamond_rounded, size: r.sp(12), color: color.withValues(alpha: 0.5)),
+          DiamondIcon(size: r.sp(12), color: color.withValues(alpha: 0.5)),
           SizedBox(width: r.w(6)),
           Expanded(
             child: ClipRRect(

@@ -7,8 +7,7 @@ import '../game/room_type.dart';
 import '../services/app_economy_config_service.dart';
 import '../services/lang_service.dart';
 import '../utils/match_time.dart';
-import '../utils/player_rank.dart';
-import 'bot_name_badge.dart';
+import '../utils/diamond_ui.dart';
 import '../utils/responsive_layout.dart';
 
 /// Tracks the rendered HUD height for overlay positioning.
@@ -21,7 +20,7 @@ class GameHudMetrics {
       MediaQuery.paddingOf(context).top + toolbarHeight.value;
 }
 
-/// Cosmic top HUD — header + podium row + optional local-player row.
+/// Match top HUD — meta row + live 6-player standings grid.
 class GameHudOverlay extends StatelessWidget {
   const GameHudOverlay({
     super.key,
@@ -50,12 +49,10 @@ class GameHudOverlay extends StatelessWidget {
   final String? hardcoreVictoryBlockKey;
   final VoidCallback? onBack;
 
-  static const int topRowCount = 3;
+  static const int standingsCount = 6;
+  static const int standingsRows = 3;
 
-  static const _void = Color(0xFF020208);
-  static const _surface = Color(0xFF0A0A1A);
-  static const _panel = Color(0xFF12122A);
-  static const _cyan = Color(0xFF00F0FF);
+  static const _panel = Color(0xFF0C0C16);
 
   static double totalTopInset(BuildContext context) =>
       GameHudMetrics.totalTopInset(context);
@@ -75,14 +72,13 @@ class GameHudOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = ResponsiveLayout.of(context);
-    final layout = layoutRoomLeaderboard(entries, maxTop: topRowCount);
-    final topRow = layout.top;
-    final sideEntry = layout.side;
+    final layout = layoutRoomLeaderboard(entries, maxTop: standingsCount);
+    final standings = layout.top;
     final roomAccent = _roomAccent(roomType);
 
-    final hPad = r.w(10);
-    final vPad = r.w(6);
-    final rowGap = r.w(5);
+    final hPad = r.w(8);
+    final vPad = r.w(5);
+    final rowGap = r.w(4);
 
     return MeasureSize(
       onChange: (size) {
@@ -94,34 +90,13 @@ class GameHudOverlay extends StatelessWidget {
         color: Colors.transparent,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                _panel.withValues(alpha: 0.97),
-                _surface.withValues(alpha: 0.96),
-                _void.withValues(alpha: 0.92),
-              ],
-              stops: const [0.0, 0.55, 1.0],
-            ),
+            color: _panel.withValues(alpha: 0.88),
             border: Border(
               bottom: BorderSide(
-                color: _cyan.withValues(alpha: 0.35),
-                width: 1.2,
+                color: roomAccent.withValues(alpha: 0.22),
+                width: 1,
               ),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: _cyan.withValues(alpha: 0.14),
-                blurRadius: 18,
-                offset: const Offset(0, 4),
-              ),
-              BoxShadow(
-                color: roomAccent.withValues(alpha: 0.06),
-                blurRadius: 28,
-                offset: const Offset(0, 8),
-              ),
-            ],
           ),
           child: SafeArea(
             bottom: false,
@@ -143,11 +118,9 @@ class GameHudOverlay extends StatelessWidget {
                     onBack: onBack,
                   ),
                   SizedBox(height: rowGap),
-                  _LeaderboardGrid(
-                    topRow: topRow,
-                    sideEntry: sideEntry,
+                  _StandingsPanel(
+                    entries: standings,
                     roomType: roomType,
-                    rowGap: rowGap,
                   ),
                 ],
               ),
@@ -159,50 +132,244 @@ class GameHudOverlay extends StatelessWidget {
   }
 }
 
-/// Top 3 + optional side slot — all in one row.
-class _LeaderboardGrid extends StatelessWidget {
-  const _LeaderboardGrid({
-    required this.topRow,
-    required this.sideEntry,
+/// 3 rows × 2 columns — ranks 1–3 left, 4–6 right.
+class _StandingsPanel extends StatelessWidget {
+  const _StandingsPanel({
+    required this.entries,
     required this.roomType,
-    required this.rowGap,
   });
 
-  final List<LeaderboardEntry> topRow;
-  final LeaderboardEntry? sideEntry;
+  final List<LeaderboardEntry> entries;
   final RoomType roomType;
-  final double rowGap;
+
+  static const _slotCount = GameHudOverlay.standingsCount;
+  static const _rowCount = GameHudOverlay.standingsRows;
 
   @override
   Widget build(BuildContext context) {
-    // Side slot only when needed — keeps three wide columns on small phones.
-    final slots = <LeaderboardEntry?>[
-      for (var i = 0; i < 3; i++) i < topRow.length ? topRow[i] : null,
-      if (sideEntry != null) sideEntry,
-    ];
+    final slots = List<LeaderboardEntry?>.filled(_slotCount, null);
+    for (var i = 0; i < entries.length && i < _slotCount; i++) {
+      slots[i] = entries[i];
+    }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < slots.length; i++)
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(left: i == 0 ? 0 : rowGap),
-              child: slots[i] != null
-                  ? _PodiumCard(
-                      entry: slots[i]!,
-                      roomType: roomType,
-                      compact: slots.length > 3,
-                    )
-                  : _EmptyPodiumSlot(),
+    final left = slots.sublist(0, _rowCount);
+    final right = slots.sublist(_rowCount, _slotCount);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.white.withValues(alpha: 0.035),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _StandingsColumn(
+                slots: left,
+                roomType: roomType,
+              ),
             ),
-          ),
+            Container(
+              width: 1,
+              color: Colors.white.withValues(alpha: 0.08),
+            ),
+            Expanded(
+              child: _StandingsColumn(
+                slots: right,
+                roomType: roomType,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StandingsColumn extends StatelessWidget {
+  const _StandingsColumn({
+    required this.slots,
+    required this.roomType,
+  });
+
+  final List<LeaderboardEntry?> slots;
+  final RoomType roomType;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < slots.length; i++) ...[
+          if (i > 0)
+            Divider(
+              height: 1,
+              thickness: 1,
+              color: Colors.white.withValues(alpha: 0.06),
+            ),
+          if (slots[i] != null)
+            _StandingsRow(
+              entry: slots[i]!,
+              roomType: roomType,
+              isPinnedLocal: slots[i]!.isPinnedLocal,
+              dense: true,
+            )
+          else
+            const _StandingsEmptyRow(dense: true),
+        ],
       ],
     );
   }
 }
 
-/// Row 1 — back, title, timer, room (responsive).
+class _StandingsEmptyRow extends StatelessWidget {
+  const _StandingsEmptyRow({this.dense = false});
+
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = ResponsiveLayout.of(context);
+    return SizedBox(height: r.h(dense ? 24 : 26));
+  }
+}
+
+/// Single standings line — rank, name, size, reward.
+class _StandingsRow extends StatelessWidget {
+  const _StandingsRow({
+    required this.entry,
+    required this.roomType,
+    this.isPinnedLocal = false,
+    this.dense = false,
+  });
+
+  final LeaderboardEntry entry;
+  final RoomType roomType;
+  final bool isPinnedLocal;
+  final bool dense;
+
+  static const _localAccent = Color(0xFF00F0FF);
+
+  @override
+  Widget build(BuildContext context) {
+    final r = ResponsiveLayout.of(context);
+    final lang = context.lang;
+    final rank = entry.rank ?? 0;
+    final medal = _medalColor(rank);
+    final isLocal = entry.isLocal || isPinnedLocal;
+    final reward = roomType.diamondRewardForPlacement(rank);
+    final rankColor = medal ??
+        (isLocal ? _localAccent : Colors.white.withValues(alpha: 0.55));
+    final rowHeight = r.h(dense ? 24 : 26);
+    final hPad = r.w(dense ? 5 : 8);
+    final rankWidth = r.w(dense ? 16 : 22);
+
+    return ColoredBox(
+      color: isLocal
+          ? _localAccent.withValues(alpha: 0.07)
+          : Colors.transparent,
+      child: SizedBox(
+        height: rowHeight,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: hPad),
+          child: Row(
+            children: [
+              SizedBox(
+                width: rankWidth,
+                child: Text(
+                  '$rank',
+                  style: TextStyle(
+                    color: rankColor,
+                    fontSize: r.sp(dense ? 10.5 : 11.5),
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _StandingsName(
+                  entry: entry,
+                  isLocal: isLocal,
+                  youLabel: lang.t('leaderboard_you'),
+                  dense: dense,
+                ),
+              ),
+              Text(
+                entry.visible ? entry.radius.toStringAsFixed(0) : '—',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: isLocal ? 0.9 : 0.72),
+                  fontSize: r.sp(dense ? 10 : 11),
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              if (reward > 0) ...[
+                SizedBox(width: r.w(dense ? 3 : 6)),
+                _DiamondRewardLabel(
+                  reward: reward,
+                  size: r.sp(dense ? 8.5 : 9.5),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StandingsName extends StatelessWidget {
+  const _StandingsName({
+    required this.entry,
+    required this.isLocal,
+    required this.youLabel,
+    this.dense = false,
+  });
+
+  final LeaderboardEntry entry;
+  final bool isLocal;
+  final String youLabel;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = ResponsiveLayout.of(context);
+    final fontSize = r.sp(dense ? 10 : 11);
+
+    if (!entry.visible) {
+      return Text(
+        '???',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: const Color(0xFF9C27B0).withValues(alpha: 0.75),
+          fontSize: fontSize,
+          fontWeight: FontWeight.w600,
+          fontStyle: FontStyle.italic,
+        ),
+      );
+    }
+
+    final name = isLocal ? youLabel : entry.name;
+
+    return Text(
+      name,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: isLocal
+            ? Colors.white
+            : Colors.white.withValues(alpha: 0.88),
+        fontSize: fontSize,
+        fontWeight: isLocal ? FontWeight.w700 : FontWeight.w500,
+      ),
+    );
+  }
+}
+
+/// Row 1 — back, universe title (left), match stats (right).
 class _HudHeaderRow extends StatelessWidget {
   const _HudHeaderRow({
     required this.matchElapsed,
@@ -226,152 +393,45 @@ class _HudHeaderRow extends StatelessWidget {
   final String? hardcoreVictoryBlockKey;
   final VoidCallback? onBack;
 
-  static const _twoLineBreakpoint = 400.0;
-
   @override
   Widget build(BuildContext context) {
     final r = ResponsiveLayout.of(context);
-    final lang = context.lang;
-    final roomAccent = _roomAccent(roomType);
-    final title = lang.t('leaderboard_title');
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final twoLine =
-            constraints.maxWidth < _twoLineBreakpoint || r.isCompact;
-        final meta = _HudMetaChips(
-          matchElapsed: matchElapsed,
-          roomType: roomType,
-          roomInstanceNumber: roomInstanceNumber,
-          isLoadTestRoom: isLoadTestRoom,
-          alivePlayerCount: alivePlayerCount,
-          aliveBotCount: aliveBotCount,
-          hardcoreArenaActive: hardcoreArenaActive,
-          hardcoreVictoryBlockKey: hardcoreVictoryBlockKey,
-          chipGap: r.w(twoLine ? 5 : 6),
-        );
-        final leading = _HudLeadingSection(
-          onBack: onBack,
-          roomAccent: roomAccent,
-          title: title,
-        );
-
-        if (twoLine) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              leading,
-              SizedBox(height: r.w(4)),
-              LayoutBuilder(
-                builder: (context, metaConstraints) {
-                  return FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: metaConstraints.maxWidth,
-                      ),
-                      child: meta,
-                    ),
-                  );
-                },
-              ),
-            ],
-          );
-        }
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Flexible(
-              flex: 2,
-              fit: FlexFit.loose,
-              child: leading,
-            ),
-            SizedBox(width: r.w(4)),
-            Flexible(
-              flex: 3,
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: meta,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+    final roomTitle = _RoomBadge(
+      roomType: roomType,
+      instanceNumber: roomInstanceNumber,
+      isLoadTest: isLoadTestRoom,
+      asTitle: true,
     );
-  }
-}
-
-class _HudLeadingSection extends StatelessWidget {
-  const _HudLeadingSection({
-    required this.roomAccent,
-    required this.title,
-    this.onBack,
-  });
-
-  final Color roomAccent;
-  final String title;
-  final VoidCallback? onBack;
-
-  static const _cyan = Color(0xFF00F0FF);
-
-  @override
-  Widget build(BuildContext context) {
-    final r = ResponsiveLayout.of(context);
+    final stats = _HudStatsChips(
+      matchElapsed: matchElapsed,
+      roomType: roomType,
+      alivePlayerCount: alivePlayerCount,
+      aliveBotCount: aliveBotCount,
+      hardcoreArenaActive: hardcoreArenaActive,
+      hardcoreVictoryBlockKey: hardcoreVictoryBlockKey,
+      chipGap: r.w(r.isCompact ? 4 : 5),
+    );
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         if (onBack != null) ...[
           _HudBackButton(onPressed: onBack!),
-          SizedBox(width: r.w(2)),
+          SizedBox(width: r.w(4)),
         ],
-        Container(
-          width: 3,
-          height: r.h(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(2),
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [_cyan, roomAccent.withValues(alpha: 0.7)],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: _cyan.withValues(alpha: 0.45),
-                blurRadius: 6,
-              ),
-            ],
-          ),
-        ),
-        SizedBox(width: r.w(6)),
-        Icon(
-          Icons.leaderboard_rounded,
-          size: r.sp(14),
-          color: _cyan,
-        ),
-        SizedBox(width: r.w(5)),
         Expanded(
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: _cyan,
-              fontSize: r.sp(10),
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.1,
-              shadows: [
-                Shadow(
-                  color: _cyan.withValues(alpha: 0.55),
-                  blurRadius: 8,
-                ),
-              ],
+          flex: r.isCompact ? 4 : 5,
+          child: roomTitle,
+        ),
+        SizedBox(width: r.w(r.isCompact ? 4 : 6)),
+        Flexible(
+          flex: r.isCompact ? 7 : 6,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: stats,
             ),
           ),
         ),
@@ -380,12 +440,11 @@ class _HudLeadingSection extends StatelessWidget {
   }
 }
 
-class _HudMetaChips extends StatelessWidget {
-  const _HudMetaChips({
+/// Right-side match stats — timer, population, hardcore flags.
+class _HudStatsChips extends StatelessWidget {
+  const _HudStatsChips({
     required this.matchElapsed,
     required this.roomType,
-    this.roomInstanceNumber,
-    this.isLoadTestRoom = false,
     required this.alivePlayerCount,
     required this.aliveBotCount,
     this.hardcoreArenaActive = false,
@@ -395,8 +454,6 @@ class _HudMetaChips extends StatelessWidget {
 
   final double matchElapsed;
   final RoomType roomType;
-  final int? roomInstanceNumber;
-  final bool isLoadTestRoom;
   final int alivePlayerCount;
   final int aliveBotCount;
   final bool hardcoreArenaActive;
@@ -407,6 +464,7 @@ class _HudMetaChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final lang = context.lang;
     final chips = <Widget>[
+      _MatchTimerChip(elapsed: matchElapsed),
       _PopulationChip(
         playerCount: alivePlayerCount,
         botCount: aliveBotCount,
@@ -419,12 +477,6 @@ class _HudMetaChips extends StatelessWidget {
         ),
       if (hardcoreVictoryBlockKey != null)
         _HardcoreGateChip(label: lang.t(hardcoreVictoryBlockKey!)),
-      _MatchTimerChip(elapsed: matchElapsed),
-      _RoomBadge(
-        roomType: roomType,
-        instanceNumber: roomInstanceNumber,
-        isLoadTest: isLoadTestRoom,
-      ),
     ];
 
     return Row(
@@ -452,316 +504,52 @@ class _HudBackButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       visualDensity: VisualDensity.compact,
       constraints: BoxConstraints(
-        minWidth: r.w(30),
-        minHeight: r.w(30),
+        minWidth: r.w(28),
+        minHeight: r.w(28),
+      ),
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.white.withValues(alpha: 0.06),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
       ),
       icon: Icon(
         Icons.arrow_back_ios_new,
-        color: const Color(0xFF00F0FF),
-        size: r.sp(17),
+        color: Colors.white.withValues(alpha: 0.85),
+        size: r.sp(15),
       ),
     );
   }
 }
 
-/// Podium card — rank left of name, stats below.
-class _PodiumCard extends StatelessWidget {
-  const _PodiumCard({
-    required this.entry,
-    required this.roomType,
-    this.compact = false,
+class _HudChip extends StatelessWidget {
+  const _HudChip({
+    required this.child,
+    this.borderColor,
+    this.backgroundColor,
   });
 
-  final LeaderboardEntry entry;
-  final RoomType roomType;
-  final bool compact;
-
-  static const _cyan = Color(0xFF00F0FF);
+  final Widget child;
+  final Color? borderColor;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     final r = ResponsiveLayout.of(context);
-    final rank = entry.rank ?? 0;
-    final medal = _medalColor(rank);
-    final isLocal = entry.isLocal;
-    final isFirst = rank == 1;
-    final reward = roomType.diamondRewardForPlacement(rank);
-    final accent = isLocal ? _cyan : (medal ?? Colors.white);
-    final highlight = isLocal || entry.isPinnedLocal;
 
-    final displayName = entry.name;
-
-    final nameStyle = TextStyle(
-      color: isLocal
-          ? Colors.white
-          : Colors.white.withValues(alpha: 0.92),
-      fontSize: r.sp(12),
-      fontWeight: isLocal || isFirst ? FontWeight.w700 : FontWeight.w600,
-      height: 1.15,
-    );
-
-    return DecoratedBox(
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: r.w(7),
+        vertical: r.w(3),
+      ),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            accent.withValues(alpha: highlight ? 0.2 : (isFirst ? 0.14 : 0.07)),
-            const Color(0xFF0A0A1A).withValues(alpha: 0.6),
-          ],
-        ),
+        borderRadius: BorderRadius.circular(6),
+        color: backgroundColor ?? Colors.white.withValues(alpha: 0.05),
         border: Border.all(
-          color: accent.withValues(
-            alpha: highlight ? 0.55 : (isFirst ? 0.42 : 0.16),
-          ),
-          width: highlight || isFirst ? 1.2 : 1,
-        ),
-        boxShadow: highlight || isFirst
-            ? [
-                BoxShadow(
-                  color: accent.withValues(alpha: highlight ? 0.16 : 0.1),
-                  blurRadius: 10,
-                ),
-              ]
-            : null,
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: r.w(5),
-          vertical: r.w(5),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _RankLabel(
-                  rank: rank,
-                  isLocal: isLocal,
-                  visible: entry.visible,
-                ),
-                SizedBox(width: r.w(4)),
-                Expanded(
-                  child: _PodiumNameCell(
-                    entry: entry,
-                    isLocal: isLocal,
-                    displayName: displayName,
-                    nameStyle: nameStyle,
-                    compact: compact,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: r.w(4)),
-            _StatRow(
-              mass: entry.radius,
-              reward: reward,
-              accent: accent,
-            ),
-          ],
+          color: borderColor ?? Colors.white.withValues(alpha: 0.1),
         ),
       ),
-    );
-  }
-}
-
-/// Podium name line — plain flex layout, no FittedBox (avoids HUD layout crashes).
-class _PodiumNameCell extends StatelessWidget {
-  const _PodiumNameCell({
-    required this.entry,
-    required this.isLocal,
-    required this.displayName,
-    required this.nameStyle,
-    required this.compact,
-  });
-
-  final LeaderboardEntry entry;
-  final bool isLocal;
-  final String displayName;
-  final TextStyle nameStyle;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = ResponsiveLayout.of(context);
-
-    if (!entry.visible) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.visibility_off_rounded,
-            size: r.sp(12),
-            color: const Color(0xFF9C27B0).withValues(alpha: 0.8),
-          ),
-          SizedBox(width: r.w(3)),
-          Text(
-            '???',
-            style: TextStyle(
-              color: const Color(0xFF9C27B0).withValues(alpha: 0.8),
-              fontSize: r.sp(11),
-              fontWeight: FontWeight.w600,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
-      );
-    }
-
-    final rankTier = !entry.isBot && entry.rankPoints != null
-        ? playerRankForPoints(
-            entry.rankPoints!,
-            username: entry.name,
-          )
-        : null;
-    final badgeSize = r.sp(11);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (rankTier != null) ...[
-          PlayerRankBadge(
-            tier: rankTier,
-            size: badgeSize,
-            compact: true,
-          ),
-          SizedBox(height: r.h(2)),
-        ],
-        Text(
-          displayName,
-          maxLines: compact ? 2 : 3,
-          overflow: TextOverflow.ellipsis,
-          style: nameStyle,
-        ),
-      ],
-    );
-  }
-}
-
-class _RankLabel extends StatelessWidget {
-  const _RankLabel({
-    required this.rank,
-    required this.isLocal,
-    required this.visible,
-  });
-
-  final int rank;
-  final bool isLocal;
-  final bool visible;
-
-  static const _cyan = Color(0xFF00F0FF);
-
-  @override
-  Widget build(BuildContext context) {
-    final r = ResponsiveLayout.of(context);
-    final medal = _medalColor(rank);
-    final color = !visible
-        ? Colors.white.withValues(alpha: 0.3)
-        : (medal ?? (isLocal ? _cyan : Colors.white.withValues(alpha: 0.75)));
-
-    return Text(
-      '#$rank',
-      style: TextStyle(
-        color: color,
-        fontSize: r.sp(13),
-        fontWeight: FontWeight.w800,
-        height: 1,
-        shadows: medal != null && visible
-            ? [
-                Shadow(
-                  color: medal.withValues(alpha: 0.55),
-                  blurRadius: 7,
-                ),
-              ]
-            : isLocal && visible
-                ? [
-                    Shadow(
-                      color: _cyan.withValues(alpha: 0.4),
-                      blurRadius: 6,
-                    ),
-                  ]
-                : null,
-      ),
-    );
-  }
-}
-
-class _StatRow extends StatelessWidget {
-  const _StatRow({
-    required this.mass,
-    required this.reward,
-    required this.accent,
-  });
-
-  final double mass;
-  final int reward;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = ResponsiveLayout.of(context);
-
-    final massWidget = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.circle,
-          size: r.sp(5),
-          color: accent.withValues(alpha: 0.7),
-        ),
-        SizedBox(width: r.w(3)),
-        Text(
-          mass.toStringAsFixed(0),
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.65),
-            fontSize: r.sp(10.5),
-            fontWeight: FontWeight.w700,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
-    );
-
-    if (reward <= 0) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [massWidget],
-      );
-    }
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        massWidget,
-        SizedBox(width: r.w(4)),
-        _DiamondRewardLabel(reward: reward, size: r.sp(10)),
-      ],
-    );
-  }
-}
-
-class _EmptyPodiumSlot extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final r = ResponsiveLayout.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withValues(alpha: 0.04),
-            Colors.white.withValues(alpha: 0.015),
-          ],
-        ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-      ),
-      child: SizedBox(height: r.h(52)),
+      child: child,
     );
   }
 }
@@ -783,82 +571,43 @@ class _PopulationChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = ResponsiveLayout.of(context);
-    final lang = context.lang;
-    final compact = r.isCompact;
 
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: r.w(compact ? 5 : 7),
-        vertical: r.w(3),
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: Colors.white.withValues(alpha: 0.04),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-      ),
+    return _HudChip(
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             Icons.person_rounded,
-            size: r.sp(12),
-            color: _playerColor.withValues(alpha: 0.95),
+            size: r.sp(11),
+            color: _playerColor.withValues(alpha: 0.9),
           ),
           SizedBox(width: r.w(3)),
           Text(
             '$playerCount',
             style: TextStyle(
-              color: _playerColor.withValues(alpha: 0.95),
+              color: _playerColor.withValues(alpha: 0.9),
               fontSize: r.sp(11),
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
-          if (!compact) ...[
-            SizedBox(width: r.w(4)),
-            Text(
-              lang.t('hud_population_players'),
-              style: TextStyle(
-                color: _playerColor.withValues(alpha: 0.72),
-                fontSize: r.sp(9),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
           if (showBots) ...[
-            SizedBox(width: r.w(6)),
-            Container(
-              width: 1,
-              height: r.h(12),
-              color: Colors.white.withValues(alpha: 0.16),
-            ),
-            SizedBox(width: r.w(6)),
+            SizedBox(width: r.w(5)),
             Icon(
               Icons.smart_toy_rounded,
-              size: r.sp(12),
-              color: _botColor.withValues(alpha: 0.95),
+              size: r.sp(11),
+              color: _botColor.withValues(alpha: 0.9),
             ),
             SizedBox(width: r.w(3)),
             Text(
               '$botCount',
               style: TextStyle(
-                color: _botColor.withValues(alpha: 0.95),
+                color: _botColor.withValues(alpha: 0.9),
                 fontSize: r.sp(11),
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            if (!compact) ...[
-              SizedBox(width: r.w(4)),
-              Text(
-                lang.t('hud_population_bots'),
-                style: TextStyle(
-                  color: _botColor.withValues(alpha: 0.72),
-                  fontSize: r.sp(9),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
           ],
         ],
       ),
@@ -897,22 +646,15 @@ class _HardcoreArenaChip extends StatelessWidget {
             : 'hardcore_arena_passive_tooltip',
       ),
       waitDuration: const Duration(milliseconds: 350),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: r.w(r.isCompact ? 5 : 7),
-          vertical: r.w(3),
-        ),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: color.withValues(alpha: 0.1),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
-        ),
+      child: _HudChip(
+        borderColor: color.withValues(alpha: 0.35),
+        backgroundColor: color.withValues(alpha: 0.08),
         child: Text(
           label,
           style: TextStyle(
             color: color,
             fontSize: r.sp(10),
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
@@ -936,22 +678,15 @@ class _HardcoreGateChip extends StatelessWidget {
         'hardcore_gate_low_pop_cap_tooltip',
       ),
       waitDuration: const Duration(milliseconds: 350),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: r.w(r.isCompact ? 5 : 7),
-          vertical: r.w(3),
-        ),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: color.withValues(alpha: 0.12),
-          border: Border.all(color: color.withValues(alpha: 0.45)),
-        ),
+      child: _HudChip(
+        borderColor: color.withValues(alpha: 0.4),
+        backgroundColor: color.withValues(alpha: 0.1),
         child: Text(
           label,
           style: TextStyle(
             color: color,
             fontSize: r.sp(9),
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -964,40 +699,27 @@ class _MatchTimerChip extends StatelessWidget {
 
   final double elapsed;
 
-  static const _cyan = Color(0xFF00F0FF);
-
   @override
   Widget build(BuildContext context) {
     final r = ResponsiveLayout.of(context);
-    final compact = r.isCompact;
 
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: r.w(compact ? 5 : 7),
-        vertical: r.w(3),
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: _cyan.withValues(alpha: 0.08),
-        border: Border.all(color: _cyan.withValues(alpha: 0.35)),
-      ),
+    return _HudChip(
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             Icons.timer_outlined,
-            size: r.sp(12),
-            color: _cyan.withValues(alpha: 0.9),
+            size: r.sp(11),
+            color: Colors.white.withValues(alpha: 0.55),
           ),
-          SizedBox(width: r.w(4)),
+          SizedBox(width: r.w(3)),
           Text(
             formatMatchTime(elapsed),
             style: TextStyle(
-              color: _cyan.withValues(alpha: 0.95),
+              color: Colors.white.withValues(alpha: 0.9),
               fontSize: r.sp(11),
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               fontFeatures: const [FontFeature.tabularFigures()],
-              letterSpacing: 0.3,
             ),
           ),
         ],
@@ -1011,11 +733,13 @@ class _RoomBadge extends StatelessWidget {
     required this.roomType,
     this.instanceNumber,
     this.isLoadTest = false,
+    this.asTitle = false,
   });
 
   final RoomType roomType;
   final int? instanceNumber;
   final bool isLoadTest;
+  final bool asTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -1030,44 +754,39 @@ class _RoomBadge extends StatelessWidget {
       isLoadTest: isLoadTest,
     );
 
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: r.w(compact ? 6 : 8),
-        vertical: r.w(3),
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: accent.withValues(alpha: 0.08),
-        border: Border.all(color: accent.withValues(alpha: 0.42)),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withValues(alpha: 0.12),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            _roomIcon(roomType),
-            size: r.sp(compact ? 12 : 13),
-            color: accent.withValues(alpha: 0.95),
-          ),
-          SizedBox(width: r.w(4)),
-          Text(
+    final content = Row(
+      mainAxisSize: asTitle ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        Icon(
+          _roomIcon(roomType),
+          size: r.sp(asTitle ? 13 : 11),
+          color: accent.withValues(alpha: 0.95),
+        ),
+        SizedBox(width: r.w(asTitle ? 5 : 4)),
+        Flexible(
+          child: Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: accent.withValues(alpha: 0.95),
-              fontSize: r.sp(compact ? 10 : 11),
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.3,
+              fontSize: r.sp(asTitle ? (compact ? 11 : 12) : (compact ? 10 : 10.5)),
+              fontWeight: asTitle ? FontWeight.w700 : FontWeight.w600,
+              letterSpacing: asTitle ? 0.15 : 0,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+
+    if (asTitle) {
+      return content;
+    }
+
+    return _HudChip(
+      borderColor: accent.withValues(alpha: 0.35),
+      backgroundColor: accent.withValues(alpha: 0.08),
+      child: content,
     );
   }
 }
@@ -1081,35 +800,15 @@ class _DiamondRewardLabel extends StatelessWidget {
   final int reward;
   final double size;
 
-  static const _color = Color(0xFF3DFF9A);
-
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '+$reward',
-          style: TextStyle(
-            color: _color,
-            fontSize: size,
-            fontWeight: FontWeight.w800,
-            height: 1,
-            shadows: [
-              Shadow(
-                color: _color.withValues(alpha: 0.35),
-                blurRadius: 4,
-              ),
-            ],
-          ),
-        ),
-        SizedBox(width: size * 0.12),
-        Icon(
-          Icons.diamond_outlined,
-          size: size + 1.5,
-          color: const Color(0xFF00F0FF).withValues(alpha: 0.95),
-        ),
-      ],
+    return DiamondAmount(
+      amount: reward,
+      prefix: '+',
+      fontSize: size,
+      fontWeight: FontWeight.w700,
+      iconSize: size + 1.5,
+      spacing: size * 0.12,
     );
   }
 }

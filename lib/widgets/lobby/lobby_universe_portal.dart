@@ -272,6 +272,21 @@ class _LobbyUniversePortalState extends State<LobbyUniversePortal>
                           ),
                         ],
                         SizedBox(height: r.h(3)),
+                        if (hardcore && widget.trophySlots > 5) ...[
+                          SizedBox(
+                            width: widget.labelMaxWidth,
+                            child: Center(
+                              child: LobbyMiniTrophies(
+                                lit: widget.trophyLit,
+                                slots: widget.trophySlots,
+                                accent: theme.accent,
+                                locked: muted,
+                                size: 8.5,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: r.h(2)),
+                        ],
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
@@ -283,7 +298,8 @@ class _LobbyUniversePortalState extends State<LobbyUniversePortal>
                               inferno: hardcore,
                               compact: true,
                             ),
-                            if (widget.trophySlots > 0) ...[
+                            if (widget.trophySlots > 0 &&
+                                !(hardcore && widget.trophySlots > 5)) ...[
                               SizedBox(width: r.w(4)),
                               LobbyMiniTrophies(
                                 lit: widget.trophyLit,

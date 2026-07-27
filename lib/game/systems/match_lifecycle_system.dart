@@ -4,6 +4,7 @@ import '../components/bot_player.dart';
 import '../components/enemy_player.dart';
 import '../match_phase.dart';
 import '../orbit_game.dart';
+import '../room_type.dart';
 import '../session/match_placement.dart';
 
 /// Maç zaferi, oda kapanışı ve terk edilmiş evren mantığı.
@@ -213,6 +214,10 @@ class MatchLifecycleSystem {
       return;
     }
     if (!game.hasUniverseVictory(game.player.radius)) return;
+    if (game.roomType == RoomType.hardcore &&
+        !game.hardcoreArena.canClaimVictory) {
+      return;
+    }
 
     _universeShutdownInitiated = true;
     shutdownUniverseEntities();

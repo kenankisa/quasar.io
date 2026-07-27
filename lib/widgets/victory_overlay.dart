@@ -1,15 +1,16 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../utils/lang_scope.dart';
 
+import '../game/models/match_stats.dart';
 import '../game/room_type.dart';
-import '../services/lang_service.dart';
 import '../services/player_session_service.dart';
 import '../services/profile_service.dart';
 import '../utils/match_time.dart';
 import 'bot_name_badge.dart';
+import 'match_result/match_result_shared.dart';
+import 'match_stats_sheet.dart';
 import 'reward_double_ad_button.dart';
 
 class VictoryOverlay extends StatefulWidget {
@@ -20,6 +21,7 @@ class VictoryOverlay extends StatefulWidget {
     this.showFirstTrainingTrophy = false,
     this.diamondReward,
     this.victoryElapsed = 0,
+    required this.matchStats,
     this.ensureBaseClaimed,
     this.prepareSession,
     this.attestSession,
@@ -32,6 +34,7 @@ class VictoryOverlay extends StatefulWidget {
   final bool showFirstTrainingTrophy;
   final int? diamondReward;
   final double victoryElapsed;
+  final MatchStatsSnapshot matchStats;
   final Future<bool> Function()? ensureBaseClaimed;
   final Future<String?> Function()? prepareSession;
   final Future<bool> Function(String sessionId)? attestSession;
@@ -42,17 +45,10 @@ class VictoryOverlay extends StatefulWidget {
   State<VictoryOverlay> createState() => _VictoryOverlayState();
 }
 
-class _VictoryOverlayState extends State<VictoryOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse;
-
+class _VictoryOverlayState extends State<VictoryOverlay> {
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
     final reward =
         widget.diamondReward ?? widget.roomType.diamondRewardForPlacement(1);
     if (reward > 0) {
@@ -61,320 +57,75 @@ class _VictoryOverlayState extends State<VictoryOverlay>
   }
 
   @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final lang = context.lang;
     final reward =
         widget.diamondReward ?? widget.roomType.diamondRewardForPlacement(1);
+    final canDouble = reward > 0 &&
+        widget.roomType != RoomType.simple &&
+        widget.ensureBaseClaimed != null &&
+        widget.prepareSession != null &&
+        widget.attestSession != null &&
+        widget.claimDouble != null;
 
-    return Material(
-      color: Colors.black.withValues(alpha: 0.88),
-      child: Stack(
-        fit: StackFit.expand,
+    return MatchResultShell(
+      visual: MatchResultVisual.victory,
+      title: lang.t('victory_title'),
+      subtitle: lang
+          .t('victory_time')
+          .replaceAll('{time}', formatMatchTime(widget.victoryElapsed)),
+      detail: reward > 0
+          ? lang.t('victory_reward').replaceAll('{diamonds}', '$reward')
+          : null,
+      detailColor: const Color(0xFF00F0FF),
+      footer: widget.showFirstTrainingTrophy
+          ? Text(
+              lang.t('victory_first_trophy_title'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: const Color(0xFFFFD54F).withValues(alpha: 0.9),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            )
+          : null,
+      actions: Column(
         children: [
-          AnimatedBuilder(
-            animation: _pulse,
-            builder: (context, _) {
-              final t = _pulse.value;
-              return CustomPaint(
-                painter: _VictoryBurstPainter(t),
-              );
+          MatchResultStatsButton(
+            stats: widget.matchStats,
+            accent: const Color(0xFFFFD700),
+          ),
+          const SizedBox(height: 10),
+          if (canDouble) ...[
+            RewardDoubleAdButton(
+              baseDiamonds: reward,
+              ensureBaseClaimed: widget.ensureBaseClaimed!,
+              prepareSession: widget.prepareSession!,
+              attestSession: widget.attestSession!,
+              claimDouble: widget.claimDouble!,
+              ssvUserId: widget.ssvUserId,
+            ),
+            const SizedBox(height: 12),
+          ],
+          MatchResultActions(
+            primaryLabel: lang.t('victory_return_lobby'),
+            primaryIcon: Icons.rocket_launch,
+            primaryColor: canDouble
+                ? const Color(0xFFFFD700)
+                : const Color(0xFFFFD700),
+            primaryFilled: !canDouble,
+            onPrimary: () {
+              PlayerSessionService.instance.noteActivity();
+              widget.onContinue();
             },
           ),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.auto_awesome,
-                    size: 88,
-                    color: Color(0xFFFFD700),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    lang.t('victory_title'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFFFFD700),
-                      fontSize: 30,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1,
-                      shadows: [
-                        Shadow(
-                          color: Color(0xFFFF00AA),
-                          blurRadius: 24,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    lang.t('victory_subtitle'),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.75),
-                      fontSize: 15,
-                      height: 1.5,
-                    ),
-                  ),
-                  if (widget.showFirstTrainingTrophy) ...[
-                    const SizedBox(height: 20),
-                    _FirstTrainingTrophyCard(lang: lang),
-                  ],
-                  const SizedBox(height: 8),
-                  Text(
-                    lang
-                        .t('victory_time')
-                        .replaceAll('{time}', formatMatchTime(widget.victoryElapsed)),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFFFFD700),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ListenableBuilder(
-                    listenable: Listenable.merge([
-                      ProfileService.instance.profileNotifier,
-                      ProfileService.instance.matchDayDiamondNotifier,
-                    ]),
-                    builder: (context, _) {
-                      final diamonds =
-                          ProfileService.instance.profileNotifier.value
-                                  ?.diamonds ??
-                              0;
-                      final day =
-                          ProfileService.instance.matchDayDiamondNotifier.value;
-                      return Column(
-                        children: [
-                          Text(
-                            lang
-                                .t('victory_reward')
-                                .replaceAll('{diamonds}', '$reward'),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Color(0xFF00F0FF),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (reward > 0 && day != null) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              lang
-                                  .t('match_day_diamond_progress')
-                                  .replaceAll('{earned}', '${day.earned}')
-                                  .replaceAll('{cap}', '${day.cap}'),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.45),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 6),
-                          Text(
-                            '${lang.t('lobby_diamonds')}: $diamonds',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 28),
-                  if (reward > 0 &&
-                      widget.roomType != RoomType.simple &&
-                      widget.ensureBaseClaimed != null &&
-                      widget.prepareSession != null &&
-                      widget.attestSession != null &&
-                      widget.claimDouble != null) ...[
-                    RewardDoubleAdButton(
-                      baseDiamonds: reward,
-                      ensureBaseClaimed: widget.ensureBaseClaimed!,
-                      prepareSession: widget.prepareSession!,
-                      attestSession: widget.attestSession!,
-                      claimDouble: widget.claimDouble!,
-                      ssvUserId: widget.ssvUserId,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () {
-                        PlayerSessionService.instance.noteActivity();
-                        widget.onContinue();
-                      },
-                      icon: const Icon(Icons.rocket_launch),
-                      label: Text(lang.t('victory_return_lobby')),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: reward > 0 &&
-                                widget.roomType != RoomType.simple &&
-                                widget.claimDouble != null
-                            ? const Color(0xFF1A1A3A)
-                            : const Color(0xFFFFD700),
-                        foregroundColor: reward > 0 &&
-                                widget.roomType != RoomType.simple &&
-                                widget.claimDouble != null
-                            ? const Color(0xFFFFD700)
-                            : Colors.black,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 28,
-                          vertical: 14,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(
-                            color: reward > 0 &&
-                                    widget.roomType != RoomType.simple &&
-                                    widget.claimDouble != null
-                                ? const Color(0xFFFFD700).withValues(alpha: 0.5)
-                                : Colors.transparent,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    lang.t('idle_match_result_hint'),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.45),
-                      fontSize: 11,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _VictoryBurstPainter extends CustomPainter {
-  _VictoryBurstPainter(this.t);
-
-  final double t;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final maxR = size.shortestSide * 0.65;
-
-    for (var i = 0; i < 12; i++) {
-      final angle = (i / 12) * math.pi * 2 + t * math.pi;
-      final r = maxR * (0.55 + t * 0.45);
-      final paint = Paint()
-        ..shader = RadialGradient(
-          colors: [
-            const Color(0xFFFFD700).withValues(alpha: 0.35),
-            Colors.transparent,
-          ],
-        ).createShader(Rect.fromCircle(center: center, radius: r));
-      canvas.drawCircle(
-        center + Offset(math.cos(angle) * r * 0.35, math.sin(angle) * r * 0.35),
-        r * 0.25,
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _VictoryBurstPainter oldDelegate) =>
-      oldDelegate.t != t;
-}
-
-class _FirstTrainingTrophyCard extends StatelessWidget {
-  const _FirstTrainingTrophyCard({required this.lang});
-
-  final LanguageService lang;
-
-  static const _gold = Color(0xFFFFD54F);
-
-  @override
-  Widget build(BuildContext context) {
-    final total = PlayerProfile.hardcoreTrophyRequirement;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          colors: [
-            _gold.withValues(alpha: 0.18),
-            const Color(0xFF1A1028).withValues(alpha: 0.85),
-          ],
-        ),
-        border: Border.all(color: _gold.withValues(alpha: 0.45)),
-        boxShadow: [
-          BoxShadow(
-            color: _gold.withValues(alpha: 0.12),
-            blurRadius: 18,
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.emoji_events, color: _gold, size: 36),
-          const SizedBox(height: 10),
-          Text(
-            lang.t('victory_first_trophy_title'),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: _gold,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            lang
-                .t('victory_first_trophy_desc')
-                .replaceAll('{earned}', '1')
-                .replaceAll('{total}', '$total'),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.78),
-              fontSize: 13,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            lang.t('victory_first_trophy_normal_unlock'),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.55),
-              fontSize: 12,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Shown when another player finishes and the room closes for everyone.
+/// Universe closed while another player won.
 class FrozenChampionOverlay extends StatefulWidget {
   const FrozenChampionOverlay({
     super.key,
@@ -391,6 +142,7 @@ class FrozenChampionOverlay extends StatefulWidget {
     this.claimDouble,
     this.ssvUserId,
     this.showDoubleReward = false,
+    required this.matchStats,
   });
 
   final String championName;
@@ -406,6 +158,7 @@ class FrozenChampionOverlay extends StatefulWidget {
   final Future<PlayerProfile?> Function(String sessionId)? claimDouble;
   final String? ssvUserId;
   final bool showDoubleReward;
+  final MatchStatsSnapshot matchStats;
 
   @override
   State<FrozenChampionOverlay> createState() => _FrozenChampionOverlayState();
@@ -413,6 +166,13 @@ class FrozenChampionOverlay extends StatefulWidget {
 
 class _FrozenChampionOverlayState extends State<FrozenChampionOverlay> {
   bool _isLeaving = false;
+
+  MatchResultVisual get _visual {
+    final place = widget.placement;
+    if (place == 2) return MatchResultVisual.podiumSecond;
+    if (place == 3) return MatchResultVisual.podiumThird;
+    return MatchResultVisual.endedOut;
+  }
 
   @override
   void initState() {
@@ -432,145 +192,64 @@ class _FrozenChampionOverlayState extends State<FrozenChampionOverlay> {
   @override
   Widget build(BuildContext context) {
     final lang = context.lang;
+    final place = widget.placement;
+    final hasPodium = place != null && place >= 2 && place <= 3;
+    final title = switch (place) {
+      2 => lang.t('match_result_place_2_title'),
+      3 => lang.t('match_result_place_3_title'),
+      _ => lang.t('match_result_ended_title'),
+    };
+    final canDouble = widget.showDoubleReward &&
+        widget.diamondReward > 0 &&
+        widget.ensureBaseClaimed != null &&
+        widget.prepareSession != null &&
+        widget.attestSession != null &&
+        widget.claimDouble != null;
 
-    return Material(
-      color: Colors.black.withValues(alpha: 0.75),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.pause_circle_outline,
-                size: 64,
-                color: Color(0xFF00F0FF),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                lang.t('frozen_title'),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFF00F0FF),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              MatchChampionResultText(
-                template: lang.t('match_champion_result'),
-                name: widget.championName,
-                isBot: widget.isBot,
-                rankPoints: widget.championRankPoints,
-                time: formatMatchTime(widget.championElapsed),
-              ),
-              if (widget.diamondReward > 0 && widget.placement != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  lang
-                      .t('frozen_placement_reward')
-                      .replaceAll('{place}', '${widget.placement}')
-                      .replaceAll('{diamonds}', '${widget.diamondReward}'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF00F0FF),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                ListenableBuilder(
-                  listenable: ProfileService.instance.matchDayDiamondNotifier,
-                  builder: (context, _) {
-                    final day =
-                        ProfileService.instance.matchDayDiamondNotifier.value;
-                    if (day == null) return const SizedBox.shrink();
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        lang
-                            .t('match_day_diamond_progress')
-                            .replaceAll('{earned}', '${day.earned}')
-                            .replaceAll('{cap}', '${day.cap}'),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.45),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                lang.t('frozen_room_closed'),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 24),
-              if (widget.showDoubleReward &&
-                  widget.diamondReward > 0 &&
-                  widget.ensureBaseClaimed != null &&
-                  widget.prepareSession != null &&
-                  widget.attestSession != null &&
-                  widget.claimDouble != null) ...[
-                RewardDoubleAdButton(
-                  baseDiamonds: widget.diamondReward,
-                  ensureBaseClaimed: widget.ensureBaseClaimed!,
-                  prepareSession: widget.prepareSession!,
-                  attestSession: widget.attestSession!,
-                  claimDouble: widget.claimDouble!,
-                  ssvUserId: widget.ssvUserId,
-                  primaryColor: const Color(0xFF00F0FF),
-                  foregroundColor: Colors.black,
-                ),
-                const SizedBox(height: 12),
-              ],
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _isLeaving ? null : _handleLeave,
-                  icon: const Icon(Icons.home_rounded),
-                  label: Text(lang.t('game_over_return_lobby')),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: widget.showDoubleReward &&
-                            widget.diamondReward > 0
-                        ? const Color(0xFF1A1A3A)
-                        : const Color(0xFF00F0FF),
-                    foregroundColor: widget.showDoubleReward &&
-                            widget.diamondReward > 0
-                        ? const Color(0xFF00F0FF)
-                        : Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      side: BorderSide(
-                        color: widget.showDoubleReward &&
-                                widget.diamondReward > 0
-                            ? const Color(0xFF00F0FF).withValues(alpha: 0.45)
-                            : Colors.transparent,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                lang.t('idle_match_result_hint'),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.45),
-                  fontSize: 11,
-                  height: 1.35,
-                ),
-              ),
-            ],
+    return MatchResultShell(
+      visual: _visual,
+      title: title,
+      subtitle: MatchChampionResultText.buildPlain(
+        template: lang.t('match_champion_result'),
+        name: widget.championName,
+        isBot: widget.isBot,
+        rankPoints: widget.championRankPoints,
+        time: formatMatchTime(widget.championElapsed),
+      ),
+      detail: hasPodium && widget.diamondReward > 0
+          ? lang
+              .t('frozen_placement_reward')
+              .replaceAll('{place}', '$place')
+              .replaceAll('{diamonds}', '${widget.diamondReward}')
+          : null,
+      detailColor: _visual.accent,
+      actions: Column(
+        children: [
+          MatchResultStatsButton(
+            stats: widget.matchStats,
+            accent: _visual.accent,
           ),
-        ),
+          const SizedBox(height: 10),
+          if (canDouble) ...[
+            RewardDoubleAdButton(
+              baseDiamonds: widget.diamondReward,
+              ensureBaseClaimed: widget.ensureBaseClaimed!,
+              prepareSession: widget.prepareSession!,
+              attestSession: widget.attestSession!,
+              claimDouble: widget.claimDouble!,
+              ssvUserId: widget.ssvUserId,
+              primaryColor: _visual.accent,
+              foregroundColor: Colors.black,
+            ),
+            const SizedBox(height: 12),
+          ],
+          MatchResultActions(
+            primaryLabel: lang.t('game_over_return_lobby'),
+            primaryColor: _visual.accent,
+            primaryFilled: !canDouble,
+            onPrimary: _isLeaving ? null : _handleLeave,
+          ),
+        ],
       ),
     );
   }

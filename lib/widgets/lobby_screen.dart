@@ -24,8 +24,8 @@ import '../utils/hardcore_cooldown.dart';
 import '../utils/responsive_layout.dart';
 import 'admin_screen.dart' deferred as admin_screen;
 import 'daily_chest_dialog.dart';
+import 'daily_quests_dialog.dart';
 import 'how_to_play_dialog.dart';
-import 'neon_space_particle_painter.dart';
 import 'player_messages_dialog.dart';
 import 'profile_menu.dart';
 import 'settings_dialog.dart';
@@ -33,13 +33,14 @@ import 'skill_tree_dialog.dart';
 import 'version_notes_dialog.dart';
 import 'wormhole_portal.dart';
 import '../services/lobby_chat_service.dart';
+import 'lobby/hardcore_queue_dialog.dart';
+import 'lobby/lobby_constellation_space_painter.dart';
 import 'lobby/lobby_compact_header.dart';
 import 'lobby/lobby_compact_room_list.dart';
 import 'lobby/lobby_cosmic_chrome.dart';
 import 'lobby/lobby_match_entry.dart';
 import 'lobby/lobby_menu_sheet.dart';
 import 'lobby/lobby_social_tab.dart';
-import 'lobby/hardcore_queue_dialog.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -147,6 +148,7 @@ class _LobbyScreenState extends State<LobbyScreen>
           if (mounted) setState(() => _profile = updated);
         });
         unawaited(ProfileService.instance.fetchDailyChestStatus());
+        unawaited(ProfileService.instance.fetchDailyQuestsStatus());
         unawaited(ProfileService.instance.refreshMatchDayDiamonds());
       }
       _maybeShowWhatsNew();
@@ -265,6 +267,23 @@ class _LobbyScreenState extends State<LobbyScreen>
     );
   }
 
+  /// Once per UTC quest day, before the player's first match entry.
+  Future<bool> _maybeShowDailyQuestIntro() async {
+    final status = ProfileService.instance.dailyQuestsStatusNotifier.value ??
+        await ProfileService.instance.fetchDailyQuestsStatus();
+    final questDay = status?.questDay;
+    if (questDay == null || questDay.isEmpty || !mounted) return true;
+
+    final shouldShow =
+        await SettingsService.instance.shouldShowDailyQuestIntro(questDay);
+    if (!shouldShow || !mounted) return true;
+
+    await DailyQuestsDialog.show(context);
+    if (!mounted) return false;
+    await SettingsService.instance.markDailyQuestIntroShown(questDay);
+    return true;
+  }
+
   Future<void> _enterRoom(
     RoomType roomType,
     WormholePortalFocal? focal,
@@ -304,6 +323,9 @@ class _LobbyScreenState extends State<LobbyScreen>
       );
       return;
     }
+
+    final introOk = await _maybeShowDailyQuestIntro();
+    if (!introOk || !mounted) return;
 
     setState(() => _enteringRoom = true);
 
@@ -451,55 +473,12 @@ class _LobbyScreenState extends State<LobbyScreen>
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
     final lang = context.lang;
     final r = ResponsiveLayout.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF020208),
-      body: Stack(
-        children: [
-          AnimatedBuilder(
-            animation: _particleController,
-            builder: (context, _) {
-              return CustomPaint(
-                size: size,
-                painter: NeonSpaceParticlePainter(
-                  progress: _particleController.value,
-                  particleCount:
-                      SettingsService.instance.lowPerformanceMode ? 8 : 24,
-                  seed: 7,
-                  blurSigma: 2,
-                  maxOpacity: 0.35,
-                ),
-              );
-            },
-          ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: const Alignment(0, -0.5),
-                radius: 1.2,
-                colors: [
-                  const Color(0xFF1A0033).withValues(alpha: 0.28),
-                  const Color(0xFF020208),
-                ],
-              ),
-            ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: const Alignment(0.85, 0.9),
-                radius: 0.65,
-                colors: [
-                  const Color(0xFF102040).withValues(alpha: 0.18),
-                  Colors.transparent,
-                ],
-              ),
-            ),
-          ),
-          SafeArea(
+      backgroundColor: Colors.black,
+      body: SafeArea(
             child: Column(
               children: [
                 ListenableBuilder(
@@ -508,6 +487,7 @@ class _LobbyScreenState extends State<LobbyScreen>
                     ProfileService.instance.profileNotifier,
                     ProfileService.instance.dailyChestAvailable,
                     ProfileService.instance.dailyChestNextAvailableAt,
+                    ProfileService.instance.dailyQuestsStatusNotifier,
                     ProfileService.instance.matchDayDiamondNotifier,
                     PlayerInboxService.instance,
                     AdminAccess.instance,
@@ -519,6 +499,9 @@ class _LobbyScreenState extends State<LobbyScreen>
                             _profile;
                     final dayStatus =
                         ProfileService.instance.matchDayDiamondNotifier.value;
+                    final questStatus =
+                        ProfileService.instance.dailyQuestsStatusNotifier.value;
+                    final questInProgress = questStatus?.inProgressCount ?? 0;
                     return LobbyCompactHeader(
                       diamonds: profile?.diamonds ?? 0,
                       matchDayEarned: dayStatus?.earned,
@@ -532,6 +515,11 @@ class _LobbyScreenState extends State<LobbyScreen>
                       dailyChestNextAvailableAt: ProfileService
                           .instance.dailyChestNextAvailableAt.value,
                       onDailyChestTap: () => DailyChestDialog.show(context),
+                      dailyQuestsLoaded: questStatus != null,
+                      dailyQuestInProgressCount: questInProgress,
+                      dailyQuestAllComplete: questStatus?.allComplete ?? false,
+                      dailyQuestNextResetAt: questStatus?.nextResetAt,
+                      onDailyQuestsTap: () => DailyQuestsDialog.show(context),
                       onMessagesTap: () => PlayerMessagesDialog.show(context),
                       onSettingsTap: () => SettingsDialog.show(context),
                       onMenuTap: _openMenu,
@@ -593,44 +581,80 @@ class _LobbyScreenState extends State<LobbyScreen>
                 ),
                 SizedBox(height: r.h(6)),
                 Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
                       ListenableBuilder(
-                        listenable: Listenable.merge([
-                          ProfileService.instance.profileNotifier,
-                          LobbyRoomStatsService.instance,
-                        ]),
+                        listenable: SettingsService.instance,
                         builder: (context, _) {
-                          final profile = ProfileService
-                                  .instance.profileNotifier.value ??
-                              _profile;
-                          return LobbyCompactRoomList(
-                            diamonds: profile?.diamonds ?? 0,
-                            gamesWon: profile?.gamesWon ?? 0,
-                            tutorialCompleted:
-                                profile?.tutorialCompleted ?? false,
-                            portalAnimation: _particleController,
-                            trophyWinsSimple: profile?.trophyWinsSimple ?? 0,
-                            trophyWinsNormal: profile?.trophyWinsNormal ?? 0,
-                            trophyWinsElite: profile?.trophyWinsElite ?? 0,
-                            trophyWinsUnique: profile?.trophyWinsUnique ?? 0,
-                            hardcoreCooldownUntil:
-                                profile?.hardcoreCooldownUntil,
-                            hardcoreCooldownBypassed:
-                                AdminAccess.isCurrentUserAdmin,
-                            onRoomSelected: _enterRoom,
+                          final lowPerf =
+                              SettingsService.instance.lowPerformanceMode;
+                          final compact = ResponsiveLayout.of(context).isCompact;
+                          return AnimatedBuilder(
+                            animation: _particleController,
+                            builder: (context, _) {
+                              return CustomPaint(
+                                painter: LobbyConstellationSpacePainter(
+                                  time: _particleController.value,
+                                  richness: lowPerf
+                                      ? 0.4
+                                      : (compact ? 0.68 : 0.85),
+                                  isCompact: compact,
+                                ),
+                                child: const SizedBox.expand(),
+                              );
+                            },
                           );
                         },
                       ),
-                      const LobbySocialTab(),
+                      TabBarView(
+                        controller: _tabController,
+                        children: [
+                          Material(
+                            type: MaterialType.transparency,
+                            child: ListenableBuilder(
+                              listenable: Listenable.merge([
+                                ProfileService.instance.profileNotifier,
+                                LobbyRoomStatsService.instance,
+                              ]),
+                              builder: (context, _) {
+                                final profile = ProfileService
+                                        .instance.profileNotifier.value ??
+                                    _profile;
+                                return LobbyCompactRoomList(
+                                  diamonds: profile?.diamonds ?? 0,
+                                  gamesWon: profile?.gamesWon ?? 0,
+                                  tutorialCompleted:
+                                      profile?.tutorialCompleted ?? false,
+                                  portalAnimation: _particleController,
+                                  trophyWinsSimple:
+                                      profile?.trophyWinsSimple ?? 0,
+                                  trophyWinsNormal:
+                                      profile?.trophyWinsNormal ?? 0,
+                                  trophyWinsElite:
+                                      profile?.trophyWinsElite ?? 0,
+                                  trophyWinsUnique:
+                                      profile?.trophyWinsUnique ?? 0,
+                                  hardcoreCooldownUntil:
+                                      profile?.hardcoreCooldownUntil,
+                                  hardcoreCooldownBypassed:
+                                      AdminAccess.isCurrentUserAdmin,
+                                  onRoomSelected: _enterRoom,
+                                );
+                              },
+                            ),
+                          ),
+                          const Material(
+                            type: MaterialType.transparency,
+                            child: LobbySocialTab(),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
-          ),
-        ],
       ),
     );
   }

@@ -34,7 +34,7 @@ class HardcoreRules {
   /// Kill reward when arena is active ([killActiveArenaMinAlive]+ alive).
   static const int killRewardDiamonds = 4;
   static const int killActiveArenaMinAlive = 6;
-  static const int eliminationPenaltyDiamonds = 15;
+  static const int eliminationPenaltyDiamonds = 10;
   static const int victoryRewardDiamonds = 40;
   static const int victoryHardcorePoints = 1;
 

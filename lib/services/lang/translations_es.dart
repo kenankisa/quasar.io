@@ -498,7 +498,7 @@ const Map<String, String> kEsTranslations = {
       'version_current': 'Versión actual: {version}',
       'version_notes_close': 'Cerrar',
       'version_notes_dont_show': 'No volver a mostrar',
-      'lobby_version_notes': 'v2.3',
+      'lobby_version_notes': 'v2.4',
       'v21_section_title': 'Versión 2.1',
       'v21_section_subtitle':
           'Rangos con estrellas por puntos de victoria, victorias más justas (entrenamiento excluido), bloqueo de tutorial, victorias en el ranking, chat del lobby, anuncios en bandeja y banners en vivo.',

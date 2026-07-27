@@ -135,6 +135,8 @@ class _LobbySocialTabState extends State<LobbySocialTab> {
               accent: const Color(0xFF5AD7FF),
               secondary: const Color(0xFF8868FF),
               glowStrength: 0.12,
+              backgroundOpacity: 0.72,
+              showStars: false,
               child: Column(
                 children: [
                   Padding(

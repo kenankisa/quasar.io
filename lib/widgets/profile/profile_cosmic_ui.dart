@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../services/settings_service.dart';
+import '../../utils/diamond_ui.dart';
 import '../lobby/lobby_cosmic_chrome.dart';
 import '../profile_avatar.dart';
 
@@ -516,7 +517,7 @@ class ProfileCosmicCurrencyPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.diamond_rounded, color: color, size: 22),
+          DiamondIcon(color: color, size: 22),
           const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,

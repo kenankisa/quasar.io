@@ -1,3 +1,4 @@
+import '../services/app_economy_config_service.dart';
 import '../config/app_config.dart';
 
 enum RoomType { simple, normal, elite, unique, hardcore }
@@ -35,7 +36,10 @@ extension RoomTypeRewards on RoomType {
           3 => 5,
           _ => 0,
         },
-      RoomType.hardcore => 0,
+      RoomType.hardcore =>
+          placement == 1
+              ? AppEconomyConfigService.instance.config.rewardHardcore1
+              : 0,
     };
   }
 
@@ -46,7 +50,7 @@ extension RoomTypeRewards on RoomType {
         RoomType.normal => 1,
         RoomType.elite => 2,
         RoomType.unique => 3,
-        RoomType.hardcore => 15,
+        RoomType.hardcore => 10,
       };
 
   bool get awardsPlacementPodium => this != RoomType.hardcore;

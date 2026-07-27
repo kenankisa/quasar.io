@@ -23,6 +23,7 @@ import 'components/bot_population_manager.dart';
 import 'components/bot_player.dart';
 import 'components/camera_shake_behavior.dart';
 import 'components/gravity_physics_manager.dart';
+import 'components/growth_delta_popup.dart';
 import 'components/hole_swallow_manager.dart';
 import 'components/relativistic_jet_effect.dart';
 import 'components/tactical_zone_manager.dart';
@@ -32,6 +33,7 @@ import 'components/void_camera_backdrop.dart';
 import 'models/room_leaderboard.dart';
 import 'systems/camera_system.dart';
 import 'systems/hole_spatial_index.dart';
+import 'systems/hardcore_arena_system.dart';
 import 'systems/input_steering_system.dart';
 import 'systems/match_lifecycle_system.dart';
 import 'systems/network_sync_system.dart';
@@ -41,10 +43,12 @@ import 'utils/entity_status_mixins.dart';
 import 'config/room_config.dart';
 import 'config/bot_difficulty.dart';
 import 'config/first_match_tuning.dart';
+import 'config/hardcore_rules.dart';
 import 'config/interactive_tutorial.dart';
 import 'config/match_rules.dart';
 import 'config/skill_tree_config.dart';
 import 'match_phase.dart';
+import 'models/match_stats.dart';
 import 'room_type.dart';
 import 'utils/black_hole_renderer.dart';
 import 'utils/black_hole_shader_renderer.dart';
@@ -81,9 +85,15 @@ class OrbitGame extends FlameGame with PanDetector {
        ),
        initialRealPlayerCount = roomInstance?.realPlayerCount ?? 1;
 
-  double get universeVictoryRadius => matchRules.tuning.victoryRadius;
+  double get universeVictoryRadius =>
+      isReady ? matchRules.tuning.victoryRadius : _bootstrapVictoryRadius;
 
-  /// Maç, yarıçap evren zafer eşiğine ulaştığında veya geçtiğinde biter (500 / 550).
+  double get _bootstrapVictoryRadius => switch (roomType) {
+        RoomType.hardcore => HardcoreRules.victoryRadius,
+        _ => 500.0,
+      };
+
+  /// Maç, yarıçap evren zafer eşiğine ulaştığında veya geçtiğinde biter (Hardcore 600).
   bool hasUniverseVictory(double radius) => radius >= universeVictoryRadius;
 
   /// Büyüme sonrası anında zafer kontrolü — tam eşik beklenmez, >= yeterlidir.
@@ -94,6 +104,7 @@ class OrbitGame extends FlameGame with PanDetector {
 
   late final MatchLifecycleSystem lifecycle = MatchLifecycleSystem(this);
   late final NetworkSyncSystem network = NetworkSyncSystem(this);
+  late final HardcoreArenaSystem hardcoreArena = HardcoreArenaSystem(this);
   late final CameraSystem cameraSystem = CameraSystem(this);
   late final InputSteeringSystem input = InputSteeringSystem(this);
 
@@ -397,6 +408,14 @@ class OrbitGame extends FlameGame with PanDetector {
   double eliminatedRadius = 0;
   bool hasUsedRevive = false;
 
+  final MatchStatsTracker matchStats = MatchStatsTracker();
+
+  MatchStatsSnapshot matchStatsSnapshot() => matchStats.buildSnapshot(
+        peakRadius: maxRadiusReached,
+        matchElapsed: victoryElapsed ?? matchElapsed,
+        victoryRadius: universeVictoryRadius,
+      );
+
   bool get isFrozen => matchPhase.value != MatchPhase.playing;
 
   bool get isMatchEnded =>
@@ -556,6 +575,7 @@ class OrbitGame extends FlameGame with PanDetector {
 
   void onLocalPlayerEliminated(double radiusAtDeath) {
     if (matchPhase.value != MatchPhase.playing) return;
+    matchStats.recordDeath();
     eliminatedRadius = radiusAtDeath;
     maxRadiusReached = math.max(maxRadiusReached, radiusAtDeath);
     isSpectating.value = false;
@@ -588,6 +608,7 @@ class OrbitGame extends FlameGame with PanDetector {
     required String predatorName,
     required String preyId,
     required String preyName,
+    bool preyIsRealPlayer = false,
   }) {
     if (isMatchEnded) return;
     final resolved = _resolveAbsorbBubbleText(predatorId);
@@ -597,6 +618,13 @@ class OrbitGame extends FlameGame with PanDetector {
       '${clampPlayerName(predatorName)} → ${clampPlayerName(preyName)}',
       isKill: true,
     );
+    if (predatorId == playerId) {
+      if (preyIsRealPlayer) {
+        matchStats.recordPlayerKill();
+      } else {
+        matchStats.recordBotKill();
+      }
+    }
 
     if (isBotOnlyRoom) return;
     realtime.broadcastMatchSpeech(
@@ -815,6 +843,15 @@ class OrbitGame extends FlameGame with PanDetector {
       !player.isEliminated &&
       !gravityPhysics.isInspiralLocked(player);
 
+  bool tryActivateBoost() {
+    if (!_canUseActiveAbilities || !player.tryActivateBoost()) {
+      return false;
+    }
+    matchStats.recordBoost();
+    hudTick.value++;
+    return true;
+  }
+
   /// Random reposition with a brief shield so a bad roll is not instant death.
   bool tryActivateTeleport() {
     if (!_canUseActiveAbilities || !player.beginTeleportCooldown()) {
@@ -823,6 +860,7 @@ class OrbitGame extends FlameGame with PanDetector {
     player.velocity.setZero();
     player.position = _randomSpawnPosition(avoidOthers: true);
     player.activateShield(duration: abilityLoadout.teleportBriefShield);
+    matchStats.recordTeleport();
     camera.follow(player, snap: true);
     hudTick.value++;
     return true;
@@ -833,6 +871,7 @@ class OrbitGame extends FlameGame with PanDetector {
       return false;
     }
     player.activateShield(duration: abilityLoadout.abilityShieldDuration);
+    matchStats.recordShield();
     hudTick.value++;
     return true;
   }
@@ -843,6 +882,7 @@ class OrbitGame extends FlameGame with PanDetector {
     if (!_canUseActiveAbilities || !player.beginShockwaveCooldown()) {
       return false;
     }
+    matchStats.recordShockwave();
 
     final origin = player.position.clone();
     final range =
@@ -936,6 +976,12 @@ class OrbitGame extends FlameGame with PanDetector {
       player.tickAbilityCooldowns(dt);
       player.tickStatus(dt);
       maxRadiusReached = math.max(maxRadiusReached, player.radius);
+      matchStats.tickSampling(
+        dt: dt,
+        elapsedSeconds: _matchElapsed,
+        radius: player.radius,
+        active: matchPhase.value == MatchPhase.playing,
+      );
       input.tick(dt);
       _tickInteractiveTutorial();
     }
@@ -949,6 +995,7 @@ class OrbitGame extends FlameGame with PanDetector {
     }
     gravityPhysics.tickInspirals(dt);
     _checkCollisions();
+    hardcoreArena.tick(dt);
     lifecycle.checkVictories();
     if (player.isEliminated && isSpectating.value) {
       cameraSystem.updateSpectator(dt);
@@ -1038,6 +1085,24 @@ class OrbitGame extends FlameGame with PanDetector {
 
   void triggerScreenShake() {
     triggerExtendedScreenShake();
+  }
+
+  /// Floating +N / −N popup when a hole gains or loses mass.
+  void spawnGrowthDeltaPopup(
+    Vector2 worldPosition,
+    int delta,
+    double holeRadius,
+  ) {
+    if (delta == 0) return;
+    final jitter = (_rng.nextDouble() - 0.5) * holeRadius * 0.35;
+    world.add(
+      GrowthDeltaPopup(
+        worldPosition: worldPosition.clone(),
+        delta: delta,
+        holeRadius: holeRadius,
+        horizontalJitter: jitter,
+      ),
+    );
   }
 
   /// Stage 4 "Total Consumption & Quasar Activation": fires twin relativistic

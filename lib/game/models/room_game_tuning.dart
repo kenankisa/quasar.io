@@ -1,5 +1,6 @@
 import '../components/bot_player.dart';
 import '../config/bot_difficulty.dart';
+import '../config/hardcore_rules.dart';
 import '../config/match_pacing.dart';
 import '../config/room_config.dart';
 import '../config/room_matchmaking.dart';
@@ -129,7 +130,11 @@ class RoomGameTuning {
     final bot = BotDifficulty.presetFor(type);
     return RoomGameTuning(
       worldSize: room.worldSize,
-      victoryRadius: type == RoomType.unique ? 550 : 500,
+      victoryRadius: switch (type) {
+        RoomType.unique => 550,
+        RoomType.hardcore => HardcoreRules.victoryRadius,
+        _ => 500,
+      },
       playerStartRadius: 25,
       foodGrowthMultiplier: room.foodGrowthMultiplier,
       gravityMultiplier: room.gravityMultiplier,

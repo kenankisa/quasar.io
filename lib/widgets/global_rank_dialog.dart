@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../utils/lang_scope.dart';
 
+import '../utils/diamond_ui.dart';
 import '../utils/lang_rebuild.dart';
 
 import '../services/lang_service.dart';
@@ -353,7 +354,7 @@ class _SortTabs extends StatelessWidget {
           Expanded(
             child: _TabChip(
               label: lang.t('global_rank_tab_wealth'),
-              icon: Icons.diamond_outlined,
+              icon: kDiamondIcon,
               selected: sort == GlobalLeaderboardSort.wealth,
               activeColor: const Color(0xFF00F0FF),
               onTap: () => onSelect(GlobalLeaderboardSort.wealth),
@@ -531,7 +532,7 @@ class _RankRow extends StatelessWidget {
 
     // Mid = secondary. Right = primary sort key.
     final midIcon = sort == GlobalLeaderboardSort.hardcore
-        ? Icons.diamond_outlined
+        ? kDiamondIcon
         : Icons.emoji_events_outlined;
     final midColor = sort == GlobalLeaderboardSort.hardcore
         ? diamondColor
@@ -546,7 +547,7 @@ class _RankRow extends StatelessWidget {
     };
     final rightIcon = switch (sort) {
       GlobalLeaderboardSort.rank => Icons.star_rounded,
-      GlobalLeaderboardSort.wealth => Icons.diamond_outlined,
+      GlobalLeaderboardSort.wealth => kDiamondIcon,
       GlobalLeaderboardSort.hardcore => Icons.whatshot,
     };
     final rightColor = accent;

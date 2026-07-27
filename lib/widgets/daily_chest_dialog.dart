@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../services/player_session_service.dart';
 import '../services/profile_service.dart';
 import '../utils/responsive_layout.dart';
+import '../utils/diamond_ui.dart';
 import 'cosmic_chest_icon.dart';
 
 /// Lobby daily chest — open for configured amounts (server RNG, once per UTC day).
@@ -292,25 +293,18 @@ class _DailyChestDialogState extends State<DailyChestDialog>
             ],
             if (_awarded != null) ...[
               SizedBox(height: r.h(14)),
-              Text(
-                '+$_awarded',
-                style: TextStyle(
-                  color: accent,
-                  fontSize: r.sp(36),
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                  shadows: [
-                    Shadow(
-                      color: accent.withValues(alpha: 0.55),
-                      blurRadius: 16,
-                    ),
-                  ],
-                ),
+              DiamondAmount(
+                amount: _awarded!,
+                prefix: '+',
+                fontSize: r.sp(36),
+                fontWeight: FontWeight.w900,
+                iconSize: r.sp(38),
+                spacing: r.w(6),
               ),
               Text(
                 lang.t('lobby_diamonds'),
                 style: TextStyle(
-                  color: accent.withValues(alpha: 0.7),
+                  color: kDiamondColor.withValues(alpha: 0.7),
                   fontSize: r.sp(11),
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.2,

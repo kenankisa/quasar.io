@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../utils/lang_scope.dart';
 
+import '../utils/diamond_ui.dart';
 import '../utils/lang_rebuild.dart';
 
 import '../game/config/skill_tree_config.dart';
@@ -209,7 +210,7 @@ class HowToPlayDialog extends StatelessWidget {
             descriptionOverride: _hardcoreDesc(lang),
           ),
           _HowToSection(
-            icon: Icons.diamond_outlined,
+            icon: kDiamondIcon,
             titleKey: 'how_to_play_currencies_title',
             descKey: 'how_to_play_currencies_desc',
             color: const Color(0xFF00F0FF),

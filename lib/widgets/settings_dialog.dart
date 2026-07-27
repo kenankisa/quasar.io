@@ -206,6 +206,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 value: _settings.showOtherSizes,
                 onChanged: _settings.setShowOtherSizes,
               ),
+              const _SectionDivider(),
+              _SwitchRow(
+                title: _lang.t('settings_show_growth_numbers'),
+                subtitle: _lang.t('settings_show_growth_numbers_desc'),
+                value: _settings.showGrowthNumbers,
+                onChanged: _settings.setShowGrowthNumbers,
+              ),
             ],
           ),
         ),

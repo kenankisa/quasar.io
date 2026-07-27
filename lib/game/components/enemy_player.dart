@@ -82,7 +82,9 @@ class EnemyPlayer extends PositionComponent
       isShieldActive && otherRadius > radius;
 
   @override
-  void growBy(double amount) => setRadius(radius + amount);
+  void growBy(double amount) {
+    setRadius(radius + amount);
+  }
 
   @override
   void recordAbsorb() {}

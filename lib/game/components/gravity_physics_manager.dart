@@ -518,7 +518,13 @@ class GravityPhysicsManager extends Component with HasGameReference<OrbitGame> {
         predatorName: winner.partner.displayName,
         preyId: preyId,
         preyName: loser.partner.displayName,
+        preyIsRealPlayer: loser.component is EnemyPlayer,
       );
+      if (winnerIsLocalPlayer && loser.component is EnemyPlayer) {
+        game.hardcoreArena.onLocalAbsorbedRealPlayer(
+          (loser.component as EnemyPlayer).networkId,
+        );
+      }
     }
 
     if (loser.component is Player) {

@@ -15,6 +15,7 @@ import '../services/profile_service.dart';
 import '../utils/lang_rebuild.dart';
 import '../utils/lang_scope.dart';
 import '../services/player_session_service.dart';
+import '../services/settings_service.dart';
 import '../utils/app_lifecycle.dart';
 import '../utils/display_frame_rate.dart';
 import '../utils/player_name.dart';
@@ -24,7 +25,9 @@ import '../widgets/match_comms_overlay.dart';
 import '../widgets/first_match_hint_overlay.dart';
 import '../widgets/game_hud_overlay.dart';
 import '../widgets/game_over_overlay.dart';
+import '../widgets/diamond_reward_flash.dart';
 import '../widgets/link_button.dart';
+import '../widgets/player_size_hud.dart';
 import '../widgets/spawn_protection_overlay.dart';
 import '../widgets/spectator_overlay.dart';
 import '../widgets/victory_overlay.dart';
@@ -145,7 +148,7 @@ class _GameScreenState extends State<GameScreen>
 
       if (!_matchResultSaved) {
         try {
-          await _applyMatchResultAsync(eliminated: true)
+          await _applyEliminationResultAsync()
               .timeout(const Duration(seconds: 4));
         } catch (e, st) {
           debugPrint('AFK eliminate penalty: $e\n$st');
@@ -187,7 +190,7 @@ class _GameScreenState extends State<GameScreen>
     if (_matchResultSaved) return;
 
     if (phase == MatchPhase.victory) {
-      _applyMatchResult(placement: 1);
+      unawaited(_applyVictoryResult());
       return;
     }
     if (phase == MatchPhase.frozen) {
@@ -210,6 +213,48 @@ class _GameScreenState extends State<GameScreen>
       placement: placement,
       eliminated: eliminated,
     ));
+  }
+
+  Future<void> _applyVictoryResult() async {
+    final game = _game;
+    if (game != null && widget.roomType == RoomType.hardcore) {
+      await game.hardcoreArena.syncLeaderRadiusForVictory();
+    }
+    _applyMatchResult(placement: 1);
+  }
+
+  Future<bool> _applyEliminationResultAsync() async {
+    if (_matchResultSaved) return true;
+    if (_matchResultInFlight != null) return _matchResultInFlight!;
+
+    final game = _game;
+    if (game != null && _isHardcorePassiveElim(game)) {
+      final future = () async {
+        _matchResultSaved = true;
+        try {
+          final profile =
+              await ProfileService.instance.applyHardcorePassiveElim(
+            roomInstanceId: widget.roomInstance?.id,
+          );
+          if (profile != null) {
+            unawaited(
+              AnalyticsPlayTracker.instance.end(roomType: widget.roomType),
+            );
+          }
+          return profile != null;
+        } catch (e, st) {
+          debugPrint('applyHardcorePassiveElim: $e\n$st');
+          _matchResultSaved = false;
+          return false;
+        }
+      }();
+      _matchResultInFlight = future;
+      final ok = await future;
+      if (!ok) _matchResultInFlight = null;
+      return ok;
+    }
+
+    return _applyMatchResultAsync(eliminated: true);
   }
 
   Future<bool> _applyMatchResultAsync({
@@ -235,6 +280,10 @@ class _GameScreenState extends State<GameScreen>
             AnalyticsPlayTracker.instance.end(roomType: widget.roomType),
           );
         }
+        await _syncDailyQuestProgress(
+          placement: placement,
+          eliminated: eliminated,
+        );
         return true;
       } catch (e, st) {
         debugPrint('applyMatchResult: $e\n$st');
@@ -249,6 +298,31 @@ class _GameScreenState extends State<GameScreen>
       _matchResultInFlight = null;
     }
     return ok;
+  }
+
+  Future<void> _syncDailyQuestProgress({
+    int? placement,
+    required bool eliminated,
+  }) async {
+    final game = _game;
+    if (game == null) return;
+    final stats = game.matchStatsSnapshot();
+    final questStatus = await ProfileService.instance.reportDailyQuestMatch(
+      roomType: widget.roomType,
+      placement: placement,
+      eliminated: eliminated,
+      peakRadius: stats.peakRadius,
+      survivalSeconds: stats.matchElapsed,
+      particlesAbsorbed: stats.particlesAbsorbed,
+      playerKills: stats.playerKills,
+      botKills: stats.botKills,
+      shieldUses: stats.shieldUses,
+    );
+    if (!mounted) return;
+    final grantTotal = questStatus?.grantsTotal ?? 0;
+    if (grantTotal > 0) {
+      unawaited(DiamondRewardFlash.show(context, diamonds: grantTotal));
+    }
   }
 
   /// 2× reklam öncesi base ödül claim'inin sunucuda bittiğinden emin ol.
@@ -323,13 +397,18 @@ class _GameScreenState extends State<GameScreen>
         gamesWon: _gamesWonAtStart,
       );
 
-  /// Lobide yazılan yutulma cezası — uyarıda da aynı rakam gösterilir.
-  int get _roomEliminationPenalty => _eliminationPenalty;
+  bool _isHardcorePassiveElim(OrbitGame game) =>
+      widget.roomType == RoomType.hardcore && !game.hardcoreArena.isArenaActive;
+
+  int _effectiveEliminationPenalty(OrbitGame? game) {
+    if (game != null && _isHardcorePassiveElim(game)) return 0;
+    return _eliminationPenalty;
+  }
 
   bool _shouldConfirmQuit(OrbitGame game) {
     if (_matchResultSaved || _isLeaving) return false;
-    // Eğitim evreninde elmas cezası yok.
-    if (_roomEliminationPenalty <= 0) return false;
+    // Eğitim evreninde elmas cezası yok; Hardcore pasif modda elmas cezası yok.
+    if (_effectiveEliminationPenalty(game) <= 0) return false;
 
     final phase = game.matchPhase.value;
     if (phase == MatchPhase.victory || phase == MatchPhase.frozen) {
@@ -418,9 +497,10 @@ class _GameScreenState extends State<GameScreen>
       if (game != null && !_matchResultSaved) {
         final phase = game.matchPhase.value;
         if (phase == MatchPhase.playing || phase == MatchPhase.eliminated) {
-          if (_eliminationPenalty > 0) {
+          if (_effectiveEliminationPenalty(game) > 0 ||
+              _isHardcorePassiveElim(game)) {
             try {
-              await _applyMatchResultAsync(eliminated: true)
+              await _applyEliminationResultAsync()
                   .timeout(const Duration(seconds: 4));
             } catch (e, st) {
               debugPrint('quit penalty skipped: $e\n$st');
@@ -542,7 +622,9 @@ class _GameScreenState extends State<GameScreen>
                                 game.startSpectating();
                                 setState(() {});
                               },
-                              diamondPenalty: _eliminationPenalty,
+                              diamondPenalty:
+                                  _effectiveEliminationPenalty(game),
+                              hardcorePassiveElim: _isHardcorePassiveElim(game),
                             );
                           }
                           if (phase == MatchPhase.victory) {
@@ -552,6 +634,7 @@ class _GameScreenState extends State<GameScreen>
                                   widget.roomType.diamondRewardForPlacement(1),
                               victoryElapsed:
                                   game.victoryElapsed ?? game.matchElapsed,
+                              matchStats: game.matchStatsSnapshot(),
                               onContinue: _handleVictoryContinue,
                               ensureBaseClaimed: _canOfferRewardDouble
                                   ? () => _ensureMatchRewardClaimed(
@@ -610,6 +693,7 @@ class _GameScreenState extends State<GameScreen>
                         championRankPoints: game.remoteChampionRankPoints.value,
                         placement: placement,
                         diamondReward: reward,
+                        matchStats: game.matchStatsSnapshot(),
                         onLeave: () => _quitToLobby(skipConfirm: true),
                         showDoubleReward:
                             _canOfferRewardDouble && reward > 0,
@@ -647,7 +731,7 @@ class _GameScreenState extends State<GameScreen>
                   ),
                   if (_showQuitConfirm)
                     _MatchQuitConfirmOverlay(
-                      diamondPenalty: _eliminationPenalty,
+                      diamondPenalty: _effectiveEliminationPenalty(game),
                       onStay: () => _resolveQuitConfirm(false),
                       onLeave: () => _resolveQuitConfirm(true),
                     ),
@@ -796,15 +880,24 @@ class _LeaderboardStripBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final ready = game.isReady;
 
-    return GameHudOverlay(
-      entries: _leaderboardEntries(),
-      roomType: game.roomType,
-      roomInstanceNumber: game.roomInstanceNumber,
-      isLoadTestRoom: game.isLoadTestRoom,
-      matchElapsed: game.matchElapsed,
-      alivePlayerCount: ready ? game.aliveRealPlayerCount : 1,
-      aliveBotCount: ready ? game.aliveBotCount : 0,
-      onBack: onBack,
+    return ListenableBuilder(
+      listenable: game.hudTick,
+      builder: (context, _) {
+        final hardcore = game.roomType == RoomType.hardcore;
+        final arena = hardcore && ready ? game.hardcoreArena : null;
+        return GameHudOverlay(
+          entries: _leaderboardEntries(),
+          roomType: game.roomType,
+          roomInstanceNumber: game.roomInstanceNumber,
+          isLoadTestRoom: game.isLoadTestRoom,
+          matchElapsed: game.matchElapsed,
+          alivePlayerCount: ready ? game.aliveRealPlayerCount : 1,
+          aliveBotCount: ready ? game.aliveBotCount : 0,
+          hardcoreArenaActive: arena?.isArenaActive ?? false,
+          hardcoreVictoryBlockKey: arena?.victoryBlockKey,
+          onBack: onBack,
+        );
+      },
     );
   }
 
@@ -904,6 +997,26 @@ class _GameOverlayLayerState extends State<_GameOverlayLayer> {
             builder: (context, _, child) => FirstMatchHintOverlay(game: game),
           ),
         if (showHud) MatchCommsControls(game: game),
+        if (showHud && SettingsService.instance.showOwnSize)
+          ValueListenableBuilder<double>(
+            valueListenable: GameHudMetrics.toolbarHeight,
+            builder: (context, _, __) {
+              final lineGap = r.sp(14);
+              return Positioned(
+                top: GameHudOverlay.totalTopInset(context) + 6 + lineGap,
+                right: 10,
+                child: SafeArea(
+                  top: false,
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: game.hudTick,
+                    builder: (context, _, _) => PlayerSizeHud(
+                      radius: game.player.radius,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         if (showHud)
           Positioned(
             left: 0,

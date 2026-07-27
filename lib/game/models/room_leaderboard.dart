@@ -21,7 +21,7 @@ class LeaderboardEntry {
   final int? rankPoints;
 }
 
-/// Top-3 podium plus optional side slot (local player or 4th place).
+/// Top-N standings for the match HUD grid.
 class RoomLeaderboardLayout {
   const RoomLeaderboardLayout({
     required this.top,
@@ -29,12 +29,13 @@ class RoomLeaderboardLayout {
   });
 
   final List<LeaderboardEntry> top;
+  /// Legacy — HUD grid uses [top] only (local player pinned into slot 6).
   final LeaderboardEntry? side;
 }
 
 RoomLeaderboardLayout layoutRoomLeaderboard(
   List<LeaderboardEntry> entries, {
-  int maxTop = 3,
+  int maxTop = 6,
 }) {
   final sorted = List<LeaderboardEntry>.from(entries)
     ..sort((a, b) => b.radius.compareTo(a.radius));
@@ -54,41 +55,27 @@ RoomLeaderboardLayout layoutRoomLeaderboard(
   }
 
   final localInTop = top.any((e) => e.isLocal);
-  if (localInTop) {
-    if (sorted.length > maxTop) {
-      final fourth = sorted[maxTop];
-      return RoomLeaderboardLayout(
-        top: top,
-        side: LeaderboardEntry(
-          name: fourth.name,
-          radius: fourth.radius,
-          isLocal: fourth.isLocal,
-          visible: fourth.visible,
-          rank: maxTop + 1,
-          isBot: fourth.isBot,
-          rankPoints: fourth.rankPoints,
-        ),
+  if (!localInTop) {
+    final local = sorted.where((e) => e.isLocal).firstOrNull;
+    if (local != null) {
+      final localRank = sorted.indexWhere((e) => e.isLocal) + 1;
+      final pinned = LeaderboardEntry(
+        name: local.name,
+        radius: local.radius,
+        isLocal: true,
+        visible: local.visible,
+        rank: localRank,
+        isPinnedLocal: true,
+        isBot: local.isBot,
+        rankPoints: local.rankPoints,
       );
+      if (top.length >= maxTop) {
+        top[maxTop - 1] = pinned;
+      } else {
+        top.add(pinned);
+      }
     }
-    return RoomLeaderboardLayout(top: top);
   }
 
-  final local = sorted.where((e) => e.isLocal).firstOrNull;
-  if (local == null) return RoomLeaderboardLayout(top: top);
-
-  final localRank = sorted.indexWhere((e) => e.isLocal) + 1;
-
-  return RoomLeaderboardLayout(
-    top: top,
-    side: LeaderboardEntry(
-      name: local.name,
-      radius: local.radius,
-      isLocal: true,
-      visible: local.visible,
-      rank: localRank,
-      isPinnedLocal: true,
-      isBot: local.isBot,
-      rankPoints: local.rankPoints,
-    ),
-  );
+  return RoomLeaderboardLayout(top: top);
 }

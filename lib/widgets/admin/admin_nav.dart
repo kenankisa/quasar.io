@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../utils/lang_scope.dart';
 
+import '../../utils/diamond_ui.dart';
 import 'admin_theme.dart';
 
 enum AdminNavSection {
@@ -66,7 +67,7 @@ enum AdminNavSection {
         AdminNavSection.universes => Icons.public_rounded,
         AdminNavSection.idle => Icons.timer_off_rounded,
         AdminNavSection.ranks => Icons.military_tech_rounded,
-        AdminNavSection.economy => Icons.diamond_rounded,
+        AdminNavSection.economy => kDiamondIcon,
         AdminNavSection.players => Icons.groups_rounded,
         AdminNavSection.gameTrial => Icons.sports_esports_rounded,
         AdminNavSection.loadTest => Icons.science_rounded,

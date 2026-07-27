@@ -15,6 +15,7 @@ import '../orbit_game.dart';
 import '../utils/black_hole_avatar_loader.dart';
 import '../utils/black_hole_name_label.dart';
 import '../utils/black_hole_renderer.dart';
+import '../utils/growth_delta_feedback.dart';
 import '../utils/entity_status_mixins.dart';
 import '../utils/gravity_scaling.dart';
 import '../utils/gravity_visual.dart';
@@ -323,17 +324,30 @@ class Player extends PositionComponent
     final game = findGame() as OrbitGame?;
     final cap = game?.universeVictoryRadius ?? 500.0;
     if (value >= cap) {
-      radius = value;
+      var r = value;
+      final hc = game?.hardcoreArena;
+      if (hc != null && hc.isHardcore) {
+        r = hc.clampGrowth(r);
+      }
+      radius = r;
       size = Vector2.all(BlackHoleRenderer.componentBoxSize(radius));
-      game?.checkVictoryAfterGrowth();
+      if (r >= cap) {
+        game?.checkVictoryAfterGrowth();
+      }
       return;
     }
-    radius = value.clamp(8.0, cap);
+    var r = value.clamp(8.0, cap);
+    final hc = game?.hardcoreArena;
+    if (hc != null && hc.isHardcore) {
+      r = hc.clampGrowth(r);
+    }
+    radius = r;
     size = Vector2.all(BlackHoleRenderer.componentBoxSize(radius));
   }
 
   @override
   void growBy(double amount) {
+    GrowthDeltaFeedback.maybeEmit(this, position, amount, radius);
     setRadius(radius + amount);
   }
 

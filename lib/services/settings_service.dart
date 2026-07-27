@@ -16,9 +16,11 @@ class SettingsService extends ChangeNotifier {
   static const _showProfilePicturesKey = 'quasar_show_profile_pictures';
   static const _showOwnSizeKey = 'quasar_show_own_size';
   static const _showOtherSizesKey = 'quasar_show_other_sizes';
+  static const _showGrowthNumbersKey = 'quasar_show_growth_numbers';
   static const _showKillFeedKey = 'quasar_show_kill_feed';
   static const _absorbBubblePresetKey = 'quasar_absorb_bubble_preset';
   static const _lowPerformanceModeKey = 'quasar_low_performance_mode';
+  static const _dailyQuestIntroDayKey = 'quasar_daily_quest_intro_day';
   static const defaultAbsorbBubblePresetId = 'absorbed';
 
   bool _musicEnabled = true;
@@ -29,6 +31,7 @@ class SettingsService extends ChangeNotifier {
   bool _showProfilePictures = true;
   bool _showOwnSize = true;
   bool _showOtherSizes = false;
+  bool _showGrowthNumbers = true;
   bool _showKillFeed = true;
   String _absorbBubblePresetId = defaultAbsorbBubblePresetId;
   bool _lowPerformanceMode = false;
@@ -49,6 +52,7 @@ class SettingsService extends ChangeNotifier {
   bool get showProfilePictures => _showProfilePictures;
   bool get showOwnSize => _showOwnSize;
   bool get showOtherSizes => _showOtherSizes;
+  bool get showGrowthNumbers => _showGrowthNumbers;
   bool get showKillFeed => _showKillFeed;
 
   /// Selected absorb bubble preset id (`random` or a fixed line id).
@@ -68,6 +72,7 @@ class SettingsService extends ChangeNotifier {
     _showProfilePictures = prefs.getBool(_showProfilePicturesKey) ?? true;
     _showOwnSize = prefs.getBool(_showOwnSizeKey) ?? true;
     _showOtherSizes = prefs.getBool(_showOtherSizesKey) ?? false;
+    _showGrowthNumbers = prefs.getBool(_showGrowthNumbersKey) ?? true;
     _showKillFeed = prefs.getBool(_showKillFeedKey) ?? true;
     _absorbBubblePresetId = _sanitizeAbsorbPresetId(
       prefs.getString(_absorbBubblePresetKey),
@@ -144,6 +149,14 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setShowGrowthNumbers(bool value) async {
+    if (_showGrowthNumbers == value) return;
+    _showGrowthNumbers = value;
+    final prefs = await _preferences;
+    await prefs.setBool(_showGrowthNumbersKey, value);
+    notifyListeners();
+  }
+
   Future<void> setShowKillFeed(bool value) async {
     if (_showKillFeed == value) return;
     _showKillFeed = value;
@@ -173,5 +186,18 @@ class SettingsService extends ChangeNotifier {
     final prefs = await _preferences;
     await prefs.setBool(_lowPerformanceModeKey, value);
     notifyListeners();
+  }
+
+  /// UTC quest day for which the pre-match daily quest intro was already shown.
+  Future<bool> shouldShowDailyQuestIntro(String questDay) async {
+    if (questDay.isEmpty) return false;
+    final prefs = await _preferences;
+    return prefs.getString(_dailyQuestIntroDayKey) != questDay;
+  }
+
+  Future<void> markDailyQuestIntroShown(String questDay) async {
+    if (questDay.isEmpty) return;
+    final prefs = await _preferences;
+    await prefs.setString(_dailyQuestIntroDayKey, questDay);
   }
 }

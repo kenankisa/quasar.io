@@ -132,38 +132,44 @@ class LobbyMiniTrophies extends StatelessWidget {
   final bool showAll;
   final double size;
 
-  Color _passiveTrophyColor(int index, int filled) {
-    if (index < filled) {
-      return const Color(0xFFFFD54F).withValues(alpha: locked ? 0.55 : 1);
-    }
-    final passive = Color.lerp(accent, const Color(0xFFFFE0A8), 0.45)!;
-    return passive.withValues(alpha: locked ? 0.52 : 0.42);
-  }
+  static const _litGold = Color(0xFFFFD54F);
+  static const _litGoldBright = Color(0xFFFFF176);
+  static const _passiveBorder = Color(0xFF6E7D98);
+  static const _passiveIcon = Color(0xFF8A97B0);
+  static const _passiveFill = Color(0xFF121620);
 
   @override
   Widget build(BuildContext context) {
     final filled = lit.clamp(0, slots);
-    final show = showAll ? slots : math.min(slots, 5);
+    // Hardcore gate uses 10 cups — always show every slot in one row.
+    final displayAll = showAll || slots > 5;
+    final show = displayAll ? slots : math.min(slots, 5);
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxW = constraints.maxWidth;
-        final gap = show > 6 ? 1.5 : 2.0;
+        final gap = show > 6 ? 2.0 : 2.5;
         final iconSize = maxW.isFinite && show > 0
-            ? math.max(4.0, math.min(size, (maxW - gap * (show - 1)) / show))
+            ? math.max(5.0, math.min(size, (maxW - gap * (show - 1)) / show))
             : size;
         return Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:
+              displayAll && maxW.isFinite ? MainAxisSize.max : MainAxisSize.min,
+          mainAxisAlignment: displayAll && maxW.isFinite
+              ? MainAxisAlignment.center
+              : MainAxisAlignment.start,
           children: [
             for (var i = 0; i < show; i++)
               Padding(
                 padding: EdgeInsets.only(right: i < show - 1 ? gap : 0),
-                child: Icon(
-                  Icons.emoji_events_rounded,
-                  size: iconSize,
-                  color: _passiveTrophyColor(i, filled),
+                child: _MiniTrophyCup(
+                  active: i < filled,
+                  accent: accent,
+                  locked: locked,
+                  displayAll: displayAll,
+                  iconSize: iconSize,
                 ),
               ),
-            if (!showAll && slots > show)
+            if (!displayAll && slots > show)
               Text(
                 '+${slots - show}',
                 style: TextStyle(
@@ -175,6 +181,80 @@ class LobbyMiniTrophies extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _MiniTrophyCup extends StatelessWidget {
+  const _MiniTrophyCup({
+    required this.active,
+    required this.accent,
+    required this.locked,
+    required this.displayAll,
+    required this.iconSize,
+  });
+
+  final bool active;
+  final Color accent;
+  final bool locked;
+  final bool displayAll;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final cupSize = iconSize + (displayAll ? 4.5 : 4.0);
+    final icon = iconSize.clamp(5.0, 14.0);
+
+    if (active) {
+      return Container(
+        width: cupSize,
+        height: cupSize,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              LobbyMiniTrophies._litGoldBright.withValues(alpha: 0.42),
+              LobbyMiniTrophies._litGold.withValues(alpha: 0.18),
+            ],
+          ),
+          border: Border.all(
+            color: LobbyMiniTrophies._litGold.withValues(alpha: 0.95),
+            width: displayAll ? 0.9 : 0.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: LobbyMiniTrophies._litGold.withValues(alpha: 0.38),
+              blurRadius: displayAll ? 4 : 3,
+            ),
+          ],
+        ),
+        child: Icon(
+          Icons.emoji_events_rounded,
+          size: icon,
+          color: LobbyMiniTrophies._litGoldBright,
+        ),
+      );
+    }
+
+    const passiveBorder = LobbyMiniTrophies._passiveBorder;
+    const passiveIcon = LobbyMiniTrophies._passiveIcon;
+
+    return Container(
+      width: cupSize,
+      height: cupSize,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: LobbyMiniTrophies._passiveFill.withValues(alpha: 0.78),
+        border: Border.all(
+          color: passiveBorder.withValues(alpha: locked ? 0.58 : 0.72),
+          width: displayAll ? 0.85 : 0.75,
+        ),
+      ),
+      child: Icon(
+        Icons.emoji_events_rounded,
+        size: icon,
+        color: passiveIcon.withValues(alpha: locked ? 0.62 : 0.76),
+      ),
     );
   }
 }
@@ -1184,27 +1264,23 @@ class LobbySingularityUniverseCard extends StatelessWidget {
                                 fontSize: r.sp(15.5),
                               ),
                               const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  LobbyPlayerCountPill(
-                                    label: playerLabel,
-                                    accent: accent,
-                                    locked: locked,
-                                    inferno: true,
-                                    compact: true,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: LobbyMiniTrophies(
-                                      lit: trophyLit,
-                                      slots: trophySlots,
-                                      accent: accent,
-                                      locked: locked,
-                                      showAll: true,
-                                      size: 9,
-                                    ),
-                                  ),
-                                ],
+                              LobbyPlayerCountPill(
+                                label: playerLabel,
+                                accent: accent,
+                                locked: locked,
+                                inferno: true,
+                                compact: true,
+                              ),
+                              const SizedBox(height: 4),
+                              Center(
+                                child: LobbyMiniTrophies(
+                                  lit: trophyLit,
+                                  slots: trophySlots,
+                                  accent: accent,
+                                  locked: locked,
+                                  showAll: true,
+                                  size: 9,
+                                ),
                               ),
                               if (subtitle != null) ...[
                                 const SizedBox(height: 4),

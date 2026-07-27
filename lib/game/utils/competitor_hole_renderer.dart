@@ -7,6 +7,7 @@ import '../../services/settings_service.dart';
 import '../orbit_game.dart';
 import 'black_hole_name_label.dart';
 import 'black_hole_renderer.dart';
+import 'black_hole_size_label.dart';
 import 'gravity_threat_indicator.dart';
 import 'gravity_visual.dart';
 import 'hole_swallow_visual.dart';
@@ -151,6 +152,15 @@ abstract final class CompetitorHoleRenderer {
       state: state,
       accent: fragmentationAccent,
     );
+
+    if (BlackHoleSizeLabel.shouldShowOnHole(isLocal: false)) {
+      BlackHoleSizeLabel.paint(
+        canvas: canvas,
+        radius: radius,
+        value: radius,
+        zoom: game?.camera.viewfinder.zoom ?? 1.0,
+      );
+    }
 
     if (BlackHoleNameLabel.shouldShow(isLocal: false) || showPortraits) {
       BlackHoleNameLabel.paint(

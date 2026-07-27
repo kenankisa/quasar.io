@@ -500,7 +500,7 @@ const Map<String, String> kFrTranslations = {
       'version_current': 'Version actuelle : {version}',
       'version_notes_close': 'Fermer',
       'version_notes_dont_show': 'Ne plus afficher',
-      'lobby_version_notes': 'v2.3',
+      'lobby_version_notes': 'v2.4',
       'v21_section_title': 'Version 2.1',
       'v21_section_subtitle':
           'Rangs étoiles par points de victoire, victoires plus justes (entraînement exclu), verrou tutoriel, victoires au classement, chat du lobby, annonces en boîte de réception et bannières live.',
